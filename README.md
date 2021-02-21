@@ -5,7 +5,8 @@ Simple profiler scopes for wgpu using timer queries
 
 * Easy to use profiler scopes
   * Allows nesting!
-  * Can be disabled via feature or runtime flag
+  * Can be disabled or runtime flag
+    * TODO: Disable via feature flag
   * Additionally generates debug markers 
 * Internally creates pools of timer queries automatically
   * Does not need to know in advance how many queries/profiling scopes are needed
