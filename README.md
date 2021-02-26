@@ -5,8 +5,7 @@ Simple profiler scopes for wgpu using timer queries
 
 * Easy to use profiler scopes
   * Allows nesting!
-  * Can be disabled or runtime flag
-    * TODO: Disable via feature flag
+  * Can be disabled by runtime flag
   * Additionally generates debug markers 
 * Internally creates pools of timer queries automatically
   * Does not need to know in advance how many queries/profiling scopes are needed
@@ -14,6 +13,43 @@ Simple profiler scopes for wgpu using timer queries
     * No stalling of the device at any time!
 * Many profiler instances can live side by side
 * chrome trace flamegraph json export
+
+TODO:
+* Better error messages
+* Disable via feature flag
+
+## How to use
+
+Create a new profiler object:
+```rust
+use wgpu_profiler::{wgpu_profiler, GpuProfiler};
+// ...
+let profiler = GpuProfiler::new(4, command_queue.get_timestamp_period()); // buffer up to 4 frames
+```
+
+Using scopes is easiest with the macro:
+```rust
+wgpu_profiler!("name of your scope", profiler, encoder, device, {
+  // wgpu commands go here
+});
+```
+
+Wgpu-profiler needs to insert buffer copy commands, so when you're done with an encoder and won't do any more profiling scopes on it, you need to resolve the queries:
+```rust
+profiler.resolve_queries(&mut encoder);
+```
+
+And finally, to end a profiling frame, call `end_frame`. This does a few checks and will let you know of something is off!
+```rust
+profiler.end_frame().unwrap();
+```
+
+Retrieving the oldest available frame and writing it out to a chrome trace file (don't do that every frame 😉).
+```rust
+if let Some(profiling_data) = profiler.process_finished_frame() {
+    wgpu_profiler::chrometrace::write_chrometrace(Path::new("mytrace.json"), profiling_data);
+}
+```
 
 ## Testing
 
