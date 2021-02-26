@@ -1,4 +1,6 @@
 # wgpu-profiler
+[![Crates.io](https://img.shields.io/crates/v/wgpu-profiler.svg)](https://crates.io/crates/wgpu-profiler)
+
 Simple profiler scopes for wgpu using timer queries
 
 ## Features
