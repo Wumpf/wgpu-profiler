@@ -13,7 +13,7 @@ Simple profiler scopes for wgpu using timer queries
   * Caches up profiler-frames until results are available
     * No stalling of the device at any time!
 * Many profiler instances can live side by side
-* TODO: chrome trace flamegraph json export
+* chrome trace flamegraph json export
 
 ## Testing
 

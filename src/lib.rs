@@ -1,7 +1,8 @@
 use futures::{Future, FutureExt};
 use std::{convert::TryInto, ops::Range, pin::Pin};
 
-mod macros;
+pub mod chrometrace;
+pub mod macros;
 
 const QUERY_SIZE: u32 = 8; // Newer wgpu version have QUERY_SIZE
 const QUERY_SET_MAX_QUERIES: u32 = 8192; // Newer wgpu version have QUERY_SIZE
