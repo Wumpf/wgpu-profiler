@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use wgpu_profiler::*;
 use winit::{
-    event::{Event, WindowEvent},
+    event::{Event, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::Window,
 };
@@ -18,9 +18,10 @@ fn scopes_to_console_recursive(results: &[GpuTimerScopeResult], indentation: u32
     }
 }
 
-fn console_output(results: Option<Vec<GpuTimerScopeResult>>) {
+fn console_output(results: &Option<Vec<GpuTimerScopeResult>>) {
     print!("\x1B[2J\x1B[1;1H"); // Clear terminal and put cursor to first row first column
     println!("Welcome to wgpu_profiler demo!");
+    println!("Press space to write out a trace file that can be viewed in chrome's chrome://tracing");
     println!();
     match results {
         Some(results) => {
@@ -99,7 +100,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     let mut swap_chain = device.create_swap_chain(&surface, &sc_desc);
 
     // Create a new profiler instance
-    let mut profiler = GpuProfiler::new(3, adapter.get_timestamp_period());
+    let mut profiler = GpuProfiler::new(4, adapter.get_timestamp_period());
+    let mut latest_profiler_results = None;
 
     event_loop.run(move |event, _, control_flow| {
         // Have the closure take ownership of the resources.
@@ -169,12 +171,34 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 // Signal to the profiler that the frame is finished.
                 profiler.end_frame().unwrap();
                 // Query for oldest finished frame (this is almost certainly not the one we just submitted!) and display results in the command line.
-                console_output(profiler.process_finished_frame());
+                if let Some(results) = profiler.process_finished_frame() {
+                    latest_profiler_results = Some(results);
+                }
+                console_output(&latest_profiler_results);
             }
-            Event::WindowEvent {
-                event: WindowEvent::CloseRequested,
-                ..
-            } => *control_flow = ControlFlow::Exit,
+            Event::WindowEvent { event, .. } => match event {
+                WindowEvent::CloseRequested => {
+                    *control_flow = ControlFlow::Exit;
+                }
+                WindowEvent::KeyboardInput {
+                    input:
+                        winit::event::KeyboardInput {
+                            virtual_keycode: Some(keycode),
+                            ..
+                        },
+                    ..
+                } => match keycode {
+                    VirtualKeyCode::Escape => *control_flow = ControlFlow::Exit,
+                    VirtualKeyCode::Space => {
+                        if let Some(profile_data) = &latest_profiler_results {
+                            wgpu_profiler::chrometrace::write_chrometrace(std::path::Path::new("trace.json"), profile_data)
+                                .expect("Failed to write trace.json");
+                        }
+                    }
+                    _ => {}
+                },
+                _ => {}
+            },
             _ => {}
         }
     });
