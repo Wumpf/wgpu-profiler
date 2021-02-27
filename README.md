@@ -26,15 +26,16 @@ Create a new profiler object:
 ```rust
 use wgpu_profiler::{wgpu_profiler, GpuProfiler};
 // ...
-let profiler = GpuProfiler::new(4, command_queue.get_timestamp_period()); // buffer up to 4 frames
+let profiler = GpuProfiler::new(4, adapter.get_timestamp_period()); // buffer up to 4 frames
 ```
 
 Using scopes is easiest with the macro:
 ```rust
-wgpu_profiler!("name of your scope", profiler, encoder, device, {
+wgpu_profiler!("name of your scope", &mut profiler, &mut encoder, &device, {
   // wgpu commands go here
 });
 ```
+Unless you disable timer scoping (`wgpu_profile` will still emit debug scopes), your wgpu device needs `wgpu::Features::TIMESTAMP_QUERY` enabled.
 
 Wgpu-profiler needs to insert buffer copy commands, so when you're done with an encoder and won't do any more profiling scopes on it, you need to resolve the queries:
 ```rust

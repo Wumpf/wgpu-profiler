@@ -30,13 +30,23 @@ pub struct GpuProfiler {
 }
 
 // Public interface
+#[deny(missing_docs)]
 impl GpuProfiler {
-    /// max_num_pending_frames: How many pending profiler-frames can be in flight at a time.
-    /// A profiler-frame is in flight until its queries have been successfully resolved with process_finished_queries.
-    /// If this threshold is reached, end_frame will drop frames. (typical values are 2~4)
+    /// Required wgpu features for timer scopes.
+    pub const REQUIRED_WGPU_FEATURES: wgpu::Features = wgpu::Features::TIMESTAMP_QUERY;
+
+    /// Creates a new Profiler object.
     ///
-    /// timestamp_period: Result of wgpu::Queue::get_timestamp_period()
+    /// There is nothing preventing the use of several independent profiler objects.
+    /// In order to use profiler scopes later on, the device passed needs to have the [`wgpu::Features::TIMESTAMP_QUERY`] feature enabled.
+    /// (see [`GpuProfiler::REQUIRED_WGPU_FEATURES`])
     ///
+    /// A profiler queues up to `max_num_pending_frames` "profiler-frames" at a time.
+    /// A profiler-frame is in-flight until its queries have been successfully resolved using [`GpuProfiler::process_finished_frame`].
+    /// If this threshold is reached, [`GpuProfiler::end_frame`] will drop frames.
+    /// (Typical values for `max_num_pending_frames` are 2~4)
+    ///
+    /// `timestamp_period` needs to be set to the result of [`wgpu::Adapter::get_timestamp_period()`]
     pub fn new(max_num_pending_frames: usize, timestamp_period: f32) -> Self {
         assert!(max_num_pending_frames > 0);
         GpuProfiler {
@@ -59,6 +69,13 @@ impl GpuProfiler {
         }
     }
 
+    /// Starts a new debug/timer scope on a given encoder or rendering/compute pass.
+    ///
+    /// Scopes can be arbitrarily nested.
+    ///
+    /// May create new wgpu query objects (which is why it needs a [`wgpu::Device`] reference)
+    ///
+    /// See also [`wgpu_profiler!`], [`GpuProfiler::end_scope`]
     pub fn begin_scope<Recorder: ProfilerCommandRecorder>(&mut self, label: &str, encoder_or_pass: &mut Recorder, device: &wgpu::Device) {
         if self.enable_timer {
             let start_query = self.allocate_query_pair(device);
@@ -79,6 +96,11 @@ impl GpuProfiler {
         }
     }
 
+    /// Ends a debug/timer scope.
+    ///
+    /// Panics if no scope has been open previously.
+    ///
+    /// See also [`wgpu_profiler!`], [`GpuProfiler::begin_scope`]
     pub fn end_scope<Recorder: ProfilerCommandRecorder>(&mut self, encoder_or_pass: &mut Recorder) {
         if self.enable_timer {
             let open_scope = self.open_scopes.pop().expect("No profiler GpuProfiler scope was previously opened");

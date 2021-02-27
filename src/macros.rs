@@ -1,3 +1,11 @@
+/// Easy to use profiling scope.
+///
+/// Example:
+/// ```
+/// wgpu_profiler!("name of your scope", &mut profiler, &mut encoder, &device, {
+///     // wgpu commands go here
+/// })
+/// ```
 #[macro_export]
 macro_rules! wgpu_profiler {
     ($label:expr, $profiler:expr, $encoder_or_pass:expr, $device:expr, $code:expr) => {{
