@@ -26,7 +26,7 @@ Create a new profiler object:
 ```rust
 use wgpu_profiler::{wgpu_profiler, GpuProfiler};
 // ...
-let profiler = GpuProfiler::new(4, adapter.get_timestamp_period()); // buffer up to 4 frames
+let mut profiler = GpuProfiler::new(4, adapter.get_timestamp_period()); // buffer up to 4 frames
 ```
 
 Using scopes is easiest with the macro:
@@ -54,10 +54,8 @@ if let Some(profiling_data) = profiler.process_finished_frame() {
 }
 ```
 
-## Testing
 
-No dedicated testing / sample project until there is more interest.
-So far only tested implicitly by use in individual projects.
+To get a look of it in action, check out the example project!
 
 ## License
 
