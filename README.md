@@ -47,9 +47,10 @@ And finally, to end a profiling frame, call `end_frame`. This does a few checks 
 profiler.end_frame().unwrap();
 ```
 
-Retrieving the oldest available frame and writing it out to a chrome trace file (don't do that every frame 😉).
+Retrieving the oldest available frame and writing it out to a chrome trace file.
 ```rust
 if let Some(profiling_data) = profiler.process_finished_frame() {
+    // You usually want to write to disk only under some condition, e.g. press of a key or button
     wgpu_profiler::chrometrace::write_chrometrace(Path::new("mytrace.json"), profiling_data);
 }
 ```
