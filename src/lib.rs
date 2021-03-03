@@ -3,6 +3,7 @@ use std::{convert::TryInto, ops::Range, pin::Pin};
 
 pub mod chrometrace;
 pub mod macros;
+pub mod scope;
 
 pub struct GpuTimerScopeResult {
     pub label: String,
