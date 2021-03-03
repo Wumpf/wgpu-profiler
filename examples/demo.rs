@@ -148,19 +148,29 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                         depth_stencil_attachment: None,
                     });
 
+                    // Obviously all the following draw calls could be collapsed, but they are separated to illustrate the different profiler scopes.
+
+                    // You can profile using a macro.
                     wgpu_profiler!("fractal 0", &mut profiler, &mut rpass, &device, {
                         rpass.set_pipeline(&render_pipeline);
                         rpass.draw(0..6, 0..1);
                     });
-                    wgpu_profiler!("fractal 1", &mut profiler, &mut rpass, &device, {
+                    // ... or a scope object
+                    {
+                        wgpu_profiler::scope::Scope::start("fractal 1", &mut profiler, &mut rpass, &device);
                         rpass.draw(0..6, 1..2);
-                    });
-                    wgpu_profiler!("fractal 2", &mut profiler, &mut rpass, &device, {
+                    }
+                    // ... or simply manually
+                    {
+                        profiler.begin_scope("fractal 2", &mut rpass, &device);
                         rpass.draw(0..6, 2..3);
-                    });
-                    wgpu_profiler!("fractal 3", &mut profiler, &mut rpass, &device, {
-                        rpass.draw(0..6, 3..4);
-                    });
+                        profiler.end_scope(&mut rpass);
+                    }
+                    // ... or a scope object that takes ownership of the pass
+                    {
+                        let mut scoped_pass = wgpu_profiler::scope::OwningScope::start("fractal 3", &mut profiler, rpass, &device);
+                        scoped_pass.draw(0..6, 3..4);
+                    }
                 });
 
                 // Resolves any queries that might be in flight.
