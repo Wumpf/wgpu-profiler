@@ -3,6 +3,8 @@ use std::{convert::TryInto, ops::Range, pin::Pin};
 
 pub mod chrometrace;
 pub mod macros;
+/// Scope types that wrap a `wgpu` encoder/pass and start a scope on creation. In most cases, they
+/// then allow automatically ending the scope on drop.
 pub mod scope;
 
 pub struct GpuTimerScopeResult {

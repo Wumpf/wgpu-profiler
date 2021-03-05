@@ -157,7 +157,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     });
                     // ... or a scope object
                     {
-                        wgpu_profiler::scope::Scope::start("fractal 1", &mut profiler, &mut rpass, &device);
+                        let mut rpass = wgpu_profiler::scope::Scope::start("fractal 1", &mut profiler, &mut rpass, &device);
                         rpass.draw(0..6, 1..2);
                     }
                     // ... or simply manually

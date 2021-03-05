@@ -1,22 +1,24 @@
 use crate::{GpuProfiler, ProfilerCommandRecorder};
 
 /// Scope that takes a (mutable) reference to the encoder/pass.
-/// Calls end_scope on Drop.
+/// Calls end_scope on drop.
 pub struct Scope<'a, W: ProfilerCommandRecorder> {
     profiler: &'a mut GpuProfiler,
     recorder: &'a mut W,
 }
 
 /// Scope that takes ownership of the encoder/pass.
-/// Calls end_scope on Drop.
+/// Calls end_scope on drop.
 pub struct OwningScope<'a, W: ProfilerCommandRecorder> {
     profiler: &'a mut GpuProfiler,
     recorder: W,
 }
 
-/// Scope that takes a (mutable) reference to the encoder/pass.
-/// Does NOT call end_scope on Drop.
+/// Scope that takes ownership of the encoder/pass.
+/// Does NOT call end_scope on drop.
 /// This construct is just for completeness in cases where working with scopes is preferred but one can't rely on the Drop call in the right place.
+/// This is useful when the owned value needs to be recovered after the end of the scope.
+/// In particular, to submit a `CommandEncoder` to a queue ownership of the encoder is necessary.
 pub struct ManualOwningScope<'a, W: ProfilerCommandRecorder> {
     profiler: &'a mut GpuProfiler,
     recorder: W,
@@ -49,7 +51,7 @@ impl<'a, W: ProfilerCommandRecorder> OwningScope<'a, W> {
 }
 
 impl<'a, W: ProfilerCommandRecorder> ManualOwningScope<'a, W> {
-    /// Starts a new profiler scope. Scope is NOT closed on drop and needs to be closed manually with [`ManualOwningScope.end_scope`]
+    /// Starts a new profiler scope. Scope is NOT closed on drop and needs to be closed manually with [`ManualOwningScope::end_scope`]
     pub fn start(label: &str, profiler: &'a mut GpuProfiler, mut recorder: W, device: &wgpu::Device) -> Self {
         profiler.begin_scope(label, &mut recorder, device);
         Self { profiler, recorder }
