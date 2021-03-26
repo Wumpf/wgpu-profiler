@@ -78,7 +78,6 @@ impl<'a, W: ProfilerCommandRecorder> ManualOwningScope<'a, W> {
 }
 impl<'a> Scope<'a, wgpu::CommandEncoder> {
     /// Start a render pass wrapped in a OwningScope.
-    #[must_use]
     pub fn scoped_render_pass<'b>(
         &'b mut self,
         label: &str,
@@ -90,7 +89,6 @@ impl<'a> Scope<'a, wgpu::CommandEncoder> {
     }
 
     /// Start a compute pass wrapped in a OwningScope.
-    #[must_use]
     pub fn scoped_compute_pass(
         &mut self,
         label: &str,
@@ -104,7 +102,6 @@ impl<'a> Scope<'a, wgpu::CommandEncoder> {
 
 impl<'a> OwningScope<'a, wgpu::CommandEncoder> {
     /// Start a render pass wrapped in an OwningScope.
-    #[must_use]
     pub fn scoped_render_pass<'b>(
         &'b mut self,
         label: &str,
@@ -116,7 +113,6 @@ impl<'a> OwningScope<'a, wgpu::CommandEncoder> {
     }
 
     /// Start a compute pass wrapped in a OwningScope.
-    #[must_use]
     pub fn scoped_compute_pass(
         &mut self,
         label: &str,
@@ -130,7 +126,6 @@ impl<'a> OwningScope<'a, wgpu::CommandEncoder> {
 
 impl<'a> ManualOwningScope<'a, wgpu::CommandEncoder> {
     /// Start a render pass wrapped in an OwningScope.
-    #[must_use]
     pub fn scoped_render_pass<'b>(
         &'b mut self,
         label: &str,
@@ -142,7 +137,6 @@ impl<'a> ManualOwningScope<'a, wgpu::CommandEncoder> {
     }
 
     /// Start a compute pass wrapped in an OwningScope.
-    #[must_use]
     pub fn scoped_compute_pass(
         &mut self,
         label: &str,
