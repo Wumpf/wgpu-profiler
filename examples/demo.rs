@@ -67,7 +67,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         push_constant_ranges: &[],
     });
 
-    let swapchain_format = adapter.get_swap_chain_preferred_format(&surface);
+    let swapchain_format = adapter.get_swap_chain_preferred_format(&surface).expect("Surface not compatible with this adapter!");
 
     let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: None,
@@ -100,7 +100,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     let mut swap_chain = device.create_swap_chain(&surface, &sc_desc);
 
     // Create a new profiler instance
-    let mut profiler = GpuProfiler::new(4, adapter.get_timestamp_period());
+    let mut profiler = GpuProfiler::new(4, queue.get_timestamp_period());
     let mut latest_profiler_results = None;
 
     event_loop.run(move |event, _, control_flow| {
@@ -132,8 +132,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 wgpu_profiler!("rendering", &mut profiler, &mut encoder, &device, {
                     let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: None,
-                        color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                            attachment: &frame.view,
+                        color_attachments: &[wgpu::RenderPassColorAttachment {
+                            view: &frame.view,
                             resolve_target: None,
                             ops: wgpu::Operations {
                                 load: wgpu::LoadOp::Clear(wgpu::Color {
