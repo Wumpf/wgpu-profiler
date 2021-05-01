@@ -1,51 +1,46 @@
-[[builtin(vertex_index)]]
-var<in> in_vertex_index: u32;
-[[builtin(instance_index)]]
-var<in> in_instance_index: u32;
-[[builtin(position)]]
-var<out> out_pos: vec4<f32>;
-[[location(0)]]
-var<out> out_coord: vec2<f32>;
-[[location(1)]]
-var<out> out_instance: f32;
+struct VertexOutput {
+    [[location(0)]] coord: vec2<f32>;
+    [[location(1)]] instance: f32;
+    [[builtin(position)]] pos: vec4<f32>;
+};
 
 [[stage(vertex)]]
-fn vs_main() {
-    var x: f32 = f32(((i32(in_vertex_index) + 2u) / 3u) % 2u);
-    var y: f32 = f32(((i32(in_vertex_index) + 1u) / 3u) % 2u);
-    out_coord = vec2<f32>(x, y, 0.0, 1.0);
+fn vs_main(
+    [[builtin(vertex_index)]] vertex_index: u32,
+    [[builtin(instance_index)]] instance_index: u32,
+) -> VertexOutput {
+    var out: VertexOutput;
 
-    x = x - f32(in_instance_index % 2u);
-    y = y - f32(in_instance_index / 2u);
-    out_pos = vec4<f32>(x, y, 0.0, 1.0);
+    var x: f32 = f32(((vertex_index + 2u) / 3u) % 2u);
+    var y: f32 = f32(((vertex_index + 1u) / 3u) % 2u);
+    out.coord = vec2<f32>(x, y);
 
-    out_instance = f32(in_instance_index);
+    x = x - f32(instance_index % 2u);
+    y = y - f32(instance_index / 2u);
+    out.pos = vec4<f32>(x, y, 0.0, 1.0);
+
+    out.instance = f32(instance_index);
+
+    return out;
 }
 
-[[location(0)]]
-var<in> in_coord: vec2<f32>;
-[[location(1)]]
-var<in> in_instance: f32;
-[[location(0)]]
-var<out> out_color: vec4<f32>;
-
 [[stage(fragment)]]
-fn fs_main() {
+fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
     var c: vec2<f32> = vec2<f32>(-0.79, 0.15);
-    if (in_instance == 0.0) {
+    if (in.instance == 0.0) {
         c = vec2<f32>(-1.476, 0.0);
     }
-    if (in_instance == 1.0) {
+    if (in.instance == 1.0) {
         c = vec2<f32>(0.28, 0.008);
     }
-    if (in_instance == 2.0) {
+    if (in.instance == 2.0) {
         c = vec2<f32>(-0.12, -0.77);
     }
 
-    var max_iter: i32 = 200;
-    var z: vec2<f32> = (in_coord.xy - vec2<f32>(0.5, 0.5)) * 3.0;
+    var max_iter: u32 = 200u;
+    var z: vec2<f32> = (in.coord.xy - vec2<f32>(0.5, 0.5)) * 3.0;
 
-    var i: i32 = 0;
+    var i: u32 = 0u;
     loop {
         if (i >= max_iter) {
             break;
@@ -60,6 +55,6 @@ fn fs_main() {
     }
 
     var t: f32 = f32(i) / f32(max_iter);
-    out_color = vec4<f32>(t * 3.0, t * 3.0 - 1.0, t * 3.0 - 2.0, 1.0);
-    //out_color = vec4<f32>(in_coord.x, in_coord.y, 0.0, 1.0);
+    return vec4<f32>(t * 3.0, t * 3.0 - 1.0, t * 3.0 - 2.0, 1.0);
+    //return vec4<f32>(in.coord.x, in.coord.y, 0.0, 1.0);
 }
