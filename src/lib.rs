@@ -49,7 +49,7 @@ impl GpuProfiler {
     /// If this threshold is reached, [`GpuProfiler::end_frame`] will drop frames.
     /// (Typical values for `max_num_pending_frames` are 2~4)
     ///
-    /// `timestamp_period` needs to be set to the result of [`wgpu::Adapter::get_timestamp_period()`]
+    /// `timestamp_period` needs to be set to the result of [`wgpu::Queue::get_timestamp_period`]
     pub fn new(max_num_pending_frames: usize, timestamp_period: f32) -> Self {
         assert!(max_num_pending_frames > 0);
         GpuProfiler {
@@ -324,7 +324,7 @@ struct QueryPool {
     query_set: wgpu::QuerySet,
 
     buffer: wgpu::Buffer,
-    buffer_mapping: Option<Pin<Box<dyn Future<Output = std::result::Result<(), wgpu::BufferAsyncError>>>>>,
+    buffer_mapping: Option<Pin<Box<dyn Future<Output = std::result::Result<(), wgpu::BufferAsyncError>> + Send>>>,
 
     capacity: u32,
     num_used_queries: u32,
