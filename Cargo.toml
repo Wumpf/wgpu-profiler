@@ -8,11 +8,12 @@ homepage = "https://github.com/Wumpf/wgpu-profiler"
 repository = "https://github.com/Wumpf/wgpu-profiler"
 keywords = ["graphics"]
 license = "MIT OR Apache-2.0"
+resolver = "2"
 
 [lib]
 
 [dependencies]
-wgpu = "0.9"
+wgpu = {git = "https://github.com/gfx-rs/wgpu.git", rev = "eceffc1d3505b56b5f66368912a4b9af3292d9cd"}
 futures = "0.3"
 
 [dev-dependencies]
