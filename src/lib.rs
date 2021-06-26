@@ -337,6 +337,7 @@ impl QueryPool {
     fn new(capacity: u32, device: &wgpu::Device) -> Self {
         QueryPool {
             query_set: device.create_query_set(&wgpu::QuerySetDescriptor {
+                label: Some("wgpu-profiler query pool"),
                 ty: wgpu::QueryType::Timestamp,
                 count: capacity,
             }),

@@ -13,7 +13,7 @@ resolver = "2"
 [lib]
 
 [dependencies]
-wgpu = {git = "https://github.com/gfx-rs/wgpu.git", rev = "eceffc1d3505b56b5f66368912a4b9af3292d9cd"}
+wgpu = {git = "https://github.com/gfx-rs/wgpu.git", rev = "ebe2152719c5f01ece4db760f6442635177c6828"}
 futures = "0.3"
 
 [dev-dependencies]
