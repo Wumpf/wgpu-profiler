@@ -337,6 +337,7 @@ impl QueryPool {
     fn new(capacity: u32, device: &wgpu::Device) -> Self {
         QueryPool {
             query_set: device.create_query_set(&wgpu::QuerySetDescriptor {
+                label: Some("GpuProfiler - Query Set"),
                 ty: wgpu::QueryType::Timestamp,
                 count: capacity,
             }),
@@ -344,7 +345,7 @@ impl QueryPool {
             buffer: device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("GpuProfiler - Query Buffer"),
                 size: (QUERY_SIZE * capacity) as u64,
-                usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::MAP_READ,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
                 mapped_at_creation: false,
             }),
             buffer_mapping: None,

@@ -33,7 +33,7 @@ fn console_output(results: &Option<Vec<GpuTimerScopeResult>>) {
 
 async fn run(event_loop: EventLoop<()>, window: Window) {
     let size = window.inner_size();
-    let instance = wgpu::Instance::new(wgpu::BackendBit::all());
+    let instance = wgpu::Instance::new(wgpu::Backends::all());
     let surface = unsafe { instance.create_surface(&window) };
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptions {
@@ -58,7 +58,6 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     let shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
         label: None,
         source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl"))),
-        flags: wgpu::ShaderFlags::all(),
     });
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -67,7 +66,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         push_constant_ranges: &[],
     });
 
-    let swapchain_format = adapter.get_swap_chain_preferred_format(&surface).expect("Surface not compatible with this adapter!");
+    let swapchain_format = surface.get_preferred_format(&adapter).expect("Surface not compatible with this adapter!");
 
     let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: None,
@@ -87,8 +86,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         multisample: wgpu::MultisampleState::default(),
     });
 
-    let mut sc_desc = wgpu::SwapChainDescriptor {
-        usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+    let mut sc_desc = wgpu::SurfaceConfiguration {
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
         format: swapchain_format,
         width: size.width,
         height: size.height,
@@ -97,7 +96,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         present_mode: wgpu::PresentMode::Fifo,
     };
 
-    let mut swap_chain = device.create_swap_chain(&surface, &sc_desc);
+    surface.configure(&device, &sc_desc);
 
     // Create a new profiler instance
     let mut profiler = GpuProfiler::new(4, queue.get_timestamp_period());
@@ -118,7 +117,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 if size.width > 0 && size.height > 0 {
                     sc_desc.width = size.width;
                     sc_desc.height = size.height;
-                    swap_chain = device.create_swap_chain(&surface, &sc_desc);
+                    surface.configure(&device, &sc_desc);
                 }
             }
             Event::MainEventsCleared => {
@@ -126,14 +125,15 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 window.request_redraw();
             }
             Event::RedrawRequested(_) => {
-                let frame = swap_chain.get_current_frame().expect("Failed to acquire next swap chain texture").output;
+                let frame = surface.get_current_frame().expect("Failed to acquire next swap chain texture").output;
+                let frame_view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
                 let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
                 wgpu_profiler!("rendering", &mut profiler, &mut encoder, &device, {
                     let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: None,
                         color_attachments: &[wgpu::RenderPassColorAttachment {
-                            view: &frame.view,
+                            view: &frame_view,
                             resolve_target: None,
                             ops: wgpu::Operations {
                                 load: wgpu::LoadOp::Clear(wgpu::Color {
