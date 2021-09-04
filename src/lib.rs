@@ -1,4 +1,4 @@
-use futures::{Future, FutureExt};
+use futures_lite::{Future, FutureExt, future::{block_on, poll_once}};
 use std::{convert::TryInto, ops::Range, pin::Pin};
 
 pub mod chrometrace;
@@ -191,7 +191,7 @@ impl GpuProfiler {
         if frame
             .query_pools
             .iter_mut()
-            .any(|pool| (&mut pool.buffer_mapping.as_mut().unwrap()).now_or_never().is_none())
+            .any(|pool| block_on(poll_once(pool.buffer_mapping.as_mut().unwrap())).is_none())
         {
             return None;
         }
