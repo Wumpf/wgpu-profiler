@@ -14,7 +14,7 @@ resolver="2"
 
 [dependencies]
 wgpu = "0.10"
-futures = "0.3"
+futures-lite = "1"
 
 [dev-dependencies]
 winit = "0.25.0"
