@@ -39,6 +39,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         .request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::default(),
             compatible_surface: Some(&surface),
+            force_fallback_adapter: false,
         })
         .await
         .expect("Failed to find an appropriate adapter");
@@ -125,7 +126,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 window.request_redraw();
             }
             Event::RedrawRequested(_) => {
-                let frame = surface.get_current_frame().expect("Failed to acquire next swap chain texture").output;
+                let frame = surface.get_current_texture().expect("Failed to acquire next surface texture");
                 let frame_view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
                 let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
@@ -177,6 +178,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 profiler.resolve_queries(&mut encoder);
 
                 queue.submit(Some(encoder.finish()));
+                frame.present();
 
                 // Signal to the profiler that the frame is finished.
                 profiler.end_frame().unwrap();
@@ -218,5 +220,5 @@ fn main() {
     //env_logger::init_from_env(env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "warn"));
     let event_loop = EventLoop::new();
     let window = winit::window::Window::new(&event_loop).unwrap();
-    futures::executor::block_on(run(event_loop, window));
+    futures_lite::future::block_on(run(event_loop, window));
 }
