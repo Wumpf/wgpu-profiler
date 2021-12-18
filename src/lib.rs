@@ -1,4 +1,7 @@
-use futures_lite::{Future, FutureExt, future::{block_on, poll_once}};
+use futures_lite::{
+    future::{block_on, poll_once},
+    Future, FutureExt,
+};
 use std::{convert::TryInto, ops::Range, pin::Pin};
 
 pub mod chrometrace;
@@ -90,7 +93,7 @@ impl GpuProfiler {
 
             self.open_scopes.push(UnprocessedTimerScope {
                 label: String::from(label),
-                start_query: start_query,
+                start_query,
                 ..Default::default()
             });
         }
@@ -141,6 +144,7 @@ impl GpuProfiler {
 
     /// Marks the end of a frame.
     /// Needs to be called AFTER submitting any encoder used in the current frame.
+    #[allow(clippy::result_unit_err)]
     pub fn end_frame(&mut self) -> Result<(), ()> {
         // TODO: Error messages
         if !self.open_scopes.is_empty() {
@@ -275,7 +279,7 @@ impl GpuProfiler {
 
     fn process_timings_recursive(
         timestamp_to_sec: f64,
-        resolved_query_buffers: &Vec<wgpu::BufferView>,
+        resolved_query_buffers: &[wgpu::BufferView],
         unprocessed_scopes: Vec<UnprocessedTimerScope>,
     ) -> Vec<GpuTimerScopeResult> {
         unprocessed_scopes
@@ -324,6 +328,7 @@ struct QueryPool {
     query_set: wgpu::QuerySet,
 
     buffer: wgpu::Buffer,
+    #[allow(clippy::type_complexity)]
     buffer_mapping: Option<Pin<Box<dyn Future<Output = std::result::Result<(), wgpu::BufferAsyncError>> + Send>>>,
 
     capacity: u32,
