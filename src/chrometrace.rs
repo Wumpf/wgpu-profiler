@@ -6,8 +6,8 @@ use crate::GpuTimerScopeResult;
 pub fn write_chrometrace(target: &Path, profile_data: &[GpuTimerScopeResult]) -> std::io::Result<()> {
     let mut file = File::create(target)?;
 
-    write!(file, "{{\n")?;
-    write!(file, "\"traceEvents\": [\n")?;
+    writeln!(file, "{{")?;
+    writeln!(file, "\"traceEvents\": [")?;
 
     if !profile_data.is_empty() {
         for child in profile_data.iter().take(profile_data.len() - 1) {
@@ -16,8 +16,8 @@ pub fn write_chrometrace(target: &Path, profile_data: &[GpuTimerScopeResult]) ->
         write_results_recursive(&mut file, profile_data.last().unwrap(), true)?;
     }
 
-    write!(file, "]\n")?;
-    write!(file, "}}\n")?;
+    writeln!(file, "]")?;
+    writeln!(file, "}}")?;
 
     Ok(())
 }
