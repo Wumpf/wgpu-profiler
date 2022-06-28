@@ -1,7 +1,7 @@
 /// Easy to use profiling scope.
 ///
 /// Example:
-/// ```
+/// ```ignore
 /// wgpu_profiler!("name of your scope", &mut profiler, &mut encoder, &device, {
 ///     // wgpu commands go here
 /// })
