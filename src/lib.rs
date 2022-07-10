@@ -179,7 +179,7 @@ impl GpuProfiler {
             let mapped_buffers = self.active_frame.mapped_buffers.clone();
             pool.resolved_buffer_slice().map_async(wgpu::MapMode::Read, move |res| {
                 res.unwrap();
-                mapped_buffers.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                mapped_buffers.fetch_add(1, std::sync::atomic::Ordering::Release);
             });
         }
 
@@ -198,7 +198,7 @@ impl GpuProfiler {
         let frame = self.pending_frames.first_mut()?;
 
         // We only process if all mappings succeed.
-        if frame.mapped_buffers.load(std::sync::atomic::Ordering::SeqCst) != frame.query_pools.len() {
+        if frame.mapped_buffers.load(std::sync::atomic::Ordering::Acquire) != frame.query_pools.len() {
             return None;
         }
 
