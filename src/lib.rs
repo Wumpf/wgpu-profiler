@@ -39,7 +39,7 @@ impl GpuProfiler {
     pub const ALL_WGPU_TIMER_FEATURES: wgpu::Features = wgpu::Features::TIMESTAMP_QUERY.union(wgpu::Features::WRITE_TIMESTAMP_INSIDE_PASSES);
 
     /// Combination of all timer query features GpuProfiler can leverage.
-    #[deprecated(note = "Use ALL_WGPU_TIMER_FEATURES instead")]
+    #[deprecated(since = "0.9.0", note = "Use ALL_WGPU_TIMER_FEATURES instead")]
     pub const REQUIRED_WGPU_FEATURES: wgpu::Features = GpuProfiler::ALL_WGPU_TIMER_FEATURES;
 
     /// Creates a new Profiler object.
