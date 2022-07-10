@@ -1,13 +1,13 @@
 struct VertexOutput {
-    [[location(0)]] coord: vec2<f32>;
-    [[location(1)]] instance: f32;
-    [[builtin(position)]] pos: vec4<f32>;
+    @location(0) coord: vec2<f32>,
+    @location(1) instance: f32,
+    @builtin(position) pos: vec4<f32>,
 };
 
-[[stage(vertex)]]
+@vertex
 fn vs_main(
-    [[builtin(vertex_index)]] vertex_index: u32,
-    [[builtin(instance_index)]] instance_index: u32,
+    @builtin(vertex_index) vertex_index: u32,
+    @builtin(instance_index) instance_index: u32,
 ) -> VertexOutput {
     var out: VertexOutput;
 
@@ -24,8 +24,8 @@ fn vs_main(
     return out;
 }
 
-[[stage(fragment)]]
-fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
+@fragment
+fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var c: vec2<f32> = vec2<f32>(-0.79, 0.15);
     if (in.instance == 0.0) {
         c = vec2<f32>(-1.476, 0.0);
