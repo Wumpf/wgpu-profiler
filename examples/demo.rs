@@ -48,7 +48,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         .request_device(
             &wgpu::DeviceDescriptor {
                 label: None,
-                features: GpuProfiler::REQUIRED_WGPU_FEATURES,
+                features: GpuProfiler::ALL_WGPU_TIMER_FEATURES,
                 limits: wgpu::Limits::default(),
             },
             None,
