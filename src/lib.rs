@@ -35,8 +35,12 @@ pub struct GpuProfiler {
 // Public interface
 #[deny(missing_docs)]
 impl GpuProfiler {
-    /// Required wgpu features for timer scopes.
-    pub const REQUIRED_WGPU_FEATURES: wgpu::Features = wgpu::Features::TIMESTAMP_QUERY.union(wgpu::Features::WRITE_TIMESTAMP_INSIDE_PASSES);
+    /// Combination of all timer query features GpuProfiler can leverage.
+    pub const ALL_WGPU_TIMER_FEATURES: wgpu::Features = wgpu::Features::TIMESTAMP_QUERY.union(wgpu::Features::WRITE_TIMESTAMP_INSIDE_PASSES);
+
+    /// Combination of all timer query features GpuProfiler can leverage.
+    #[deprecated(note = "Use ALL_WGPU_TIMER_FEATURES instead")]
+    pub const REQUIRED_WGPU_FEATURES: wgpu::Features = GpuProfiler::ALL_WGPU_TIMER_FEATURES;
 
     /// Creates a new Profiler object.
     ///
@@ -45,7 +49,7 @@ impl GpuProfiler {
     /// `active_features` should contain the features enabled on the device to
     /// be used in the profiler scopes, these will be used to determine what
     /// queries are supported and configure the profiler accordingly
-    /// (see [`GpuProfiler::REQUIRED_WGPU_FEATURES`])
+    /// (see [`GpuProfiler::ALL_WGPU_TIMER_FEATURES`])
     ///
     /// A profiler queues up to `max_num_pending_frames` "profiler-frames" at a time.
     /// A profiler-frame is in-flight until its queries have been successfully resolved using [`GpuProfiler::process_finished_frame`].
