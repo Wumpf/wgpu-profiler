@@ -1,8 +1,4 @@
-use futures_lite::{
-    future::{block_on, poll_once},
-    Future, FutureExt,
-};
-use std::{convert::TryInto, ops::Range, pin::Pin};
+use std::{convert::TryInto, ops::Range};
 
 pub mod chrometrace;
 pub mod macros;
@@ -20,7 +16,8 @@ pub struct GpuTimerScopeResult {
 }
 
 pub struct GpuProfiler {
-    pub enable_timer: bool,
+    enable_pass_timer: bool,
+    enable_encoder_timer: bool,
     pub enable_debug_marker: bool,
 
     unused_pools: Vec<QueryPool>,
@@ -39,12 +36,15 @@ pub struct GpuProfiler {
 #[deny(missing_docs)]
 impl GpuProfiler {
     /// Required wgpu features for timer scopes.
-    pub const REQUIRED_WGPU_FEATURES: wgpu::Features = wgpu::Features::TIMESTAMP_QUERY;
+    pub const REQUIRED_WGPU_FEATURES: wgpu::Features = wgpu::Features::TIMESTAMP_QUERY.union(wgpu::Features::WRITE_TIMESTAMP_INSIDE_PASSES);
 
     /// Creates a new Profiler object.
     ///
     /// There is nothing preventing the use of several independent profiler objects.
-    /// In order to use profiler scopes later on, the device passed needs to have the [`wgpu::Features::TIMESTAMP_QUERY`] feature enabled.
+    ///
+    /// `active_features` should contain the features enabled on the device to
+    /// be used in the profiler scopes, these will be used to determine what
+    /// queries are supported and configure the profiler accordingly
     /// (see [`GpuProfiler::REQUIRED_WGPU_FEATURES`])
     ///
     /// A profiler queues up to `max_num_pending_frames` "profiler-frames" at a time.
@@ -53,10 +53,11 @@ impl GpuProfiler {
     /// (Typical values for `max_num_pending_frames` are 2~4)
     ///
     /// `timestamp_period` needs to be set to the result of [`wgpu::Queue::get_timestamp_period`]
-    pub fn new(max_num_pending_frames: usize, timestamp_period: f32) -> Self {
+    pub fn new(max_num_pending_frames: usize, timestamp_period: f32, active_features: wgpu::Features) -> Self {
         assert!(max_num_pending_frames > 0);
         GpuProfiler {
-            enable_timer: true,
+            enable_pass_timer: active_features.contains(wgpu::Features::TIMESTAMP_QUERY),
+            enable_encoder_timer: active_features.contains(wgpu::Features::WRITE_TIMESTAMP_INSIDE_PASSES),
             enable_debug_marker: true,
 
             unused_pools: Vec::new(),
@@ -64,6 +65,7 @@ impl GpuProfiler {
             pending_frames: Vec::new(),
             active_frame: PendingFrame {
                 query_pools: Vec::new(),
+                mapped_buffers: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
                 closed_scopes: Vec::new(),
             },
             open_scopes: Vec::new(),
@@ -83,7 +85,7 @@ impl GpuProfiler {
     ///
     /// See also [`wgpu_profiler!`], [`GpuProfiler::end_scope`]
     pub fn begin_scope<Recorder: ProfilerCommandRecorder>(&mut self, label: &str, encoder_or_pass: &mut Recorder, device: &wgpu::Device) {
-        if self.enable_timer {
+        if (encoder_or_pass.is_pass() && self.enable_pass_timer) || (!encoder_or_pass.is_pass() && self.enable_encoder_timer) {
             let start_query = self.allocate_query_pair(device);
 
             encoder_or_pass.write_timestamp(
@@ -108,7 +110,7 @@ impl GpuProfiler {
     ///
     /// See also [`wgpu_profiler!`], [`GpuProfiler::begin_scope`]
     pub fn end_scope<Recorder: ProfilerCommandRecorder>(&mut self, encoder_or_pass: &mut Recorder) {
-        if self.enable_timer {
+        if (encoder_or_pass.is_pass() && self.enable_pass_timer) || (!encoder_or_pass.is_pass() && self.enable_encoder_timer) {
             let open_scope = self.open_scopes.pop().expect("No profiler GpuProfiler scope was previously opened");
             encoder_or_pass.write_timestamp(
                 &self.active_frame.query_pools[open_scope.start_query.pool_idx as usize].query_set,
@@ -174,7 +176,11 @@ impl GpuProfiler {
 
         // Map all buffers.
         for pool in self.active_frame.query_pools.iter_mut() {
-            pool.buffer_mapping = Some(pool.resolved_buffer_slice().map_async(wgpu::MapMode::Read).boxed());
+            let mapped_buffers = self.active_frame.mapped_buffers.clone();
+            pool.resolved_buffer_slice().map_async(wgpu::MapMode::Read, move |res| {
+                res.unwrap();
+                mapped_buffers.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            });
         }
 
         // Enqueue
@@ -192,11 +198,7 @@ impl GpuProfiler {
         let frame = self.pending_frames.first_mut()?;
 
         // We only process if all mappings succeed.
-        if frame
-            .query_pools
-            .iter_mut()
-            .any(|pool| block_on(poll_once(pool.buffer_mapping.as_mut().unwrap())).is_none())
-        {
+        if frame.mapped_buffers.load(std::sync::atomic::Ordering::SeqCst) != frame.query_pools.len() {
             return None;
         }
 
@@ -328,8 +330,6 @@ struct QueryPool {
     query_set: wgpu::QuerySet,
 
     buffer: wgpu::Buffer,
-    #[allow(clippy::type_complexity)]
-    buffer_mapping: Option<Pin<Box<dyn Future<Output = std::result::Result<(), wgpu::BufferAsyncError>> + Send>>>,
 
     capacity: u32,
     num_used_queries: u32,
@@ -353,7 +353,6 @@ impl QueryPool {
                 usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
                 mapped_at_creation: false,
             }),
-            buffer_mapping: None,
 
             capacity,
             num_used_queries: 0,
@@ -364,7 +363,6 @@ impl QueryPool {
     fn reset(&mut self) {
         self.num_used_queries = 0;
         self.num_resolved_queries = 0;
-        self.buffer_mapping = None;
         self.buffer.unmap();
     }
 
@@ -376,19 +374,24 @@ impl QueryPool {
 #[derive(Default)]
 struct PendingFrame {
     query_pools: Vec<QueryPool>,
+    mapped_buffers: std::sync::Arc<std::sync::atomic::AtomicUsize>,
     closed_scopes: Vec<UnprocessedTimerScope>,
 }
 
 pub trait ProfilerCommandRecorder {
+    /// Returns `true` if it's a pass or `false` if it's an encoder
+    fn is_pass(&self) -> bool;
     fn write_timestamp(&mut self, query_set: &wgpu::QuerySet, query_index: u32);
     fn push_debug_group(&mut self, label: &str);
     fn pop_debug_group(&mut self);
 }
 
 macro_rules! ImplProfilerCommandRecorder {
-    ($($name:ident $(< $lt:lifetime >)?,)*) => {
+    ($($name:ident $(< $lt:lifetime >)? : $pass:literal,)*) => {
         $(
             impl $(< $lt >)? ProfilerCommandRecorder for wgpu::$name $(< $lt >)? {
+                fn is_pass(&self) -> bool { $pass }
+
                 fn write_timestamp(&mut self, query_set: &wgpu::QuerySet, query_index: u32) {
                     self.write_timestamp(query_set, query_index)
                 }
@@ -405,4 +408,4 @@ macro_rules! ImplProfilerCommandRecorder {
     };
 }
 
-ImplProfilerCommandRecorder!(CommandEncoder, RenderPass<'a>, ComputePass<'a>,);
+ImplProfilerCommandRecorder!(CommandEncoder:false, RenderPass<'a>:true, ComputePass<'a>:true,);

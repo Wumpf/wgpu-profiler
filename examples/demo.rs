@@ -56,7 +56,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         .await
         .expect("Failed to create device");
 
-    let shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: None,
         source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl"))),
     });
@@ -67,7 +67,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         push_constant_ranges: &[],
     });
 
-    let swapchain_format = surface.get_preferred_format(&adapter).expect("Surface not compatible with this adapter!");
+    let swapchain_format = surface.get_supported_formats(&adapter)[0];
 
     let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: None,
@@ -80,7 +80,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         fragment: Some(wgpu::FragmentState {
             module: &shader,
             entry_point: "fs_main",
-            targets: &[swapchain_format.into()],
+            targets: &[Some(swapchain_format.into())],
         }),
         primitive: wgpu::PrimitiveState::default(),
         depth_stencil: None,
@@ -101,7 +101,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     surface.configure(&device, &sc_desc);
 
     // Create a new profiler instance
-    let mut profiler = GpuProfiler::new(4, queue.get_timestamp_period());
+    let mut profiler = GpuProfiler::new(4, queue.get_timestamp_period(), device.features());
     let mut latest_profiler_results = None;
 
     event_loop.run(move |event, _, control_flow| {
@@ -134,7 +134,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 wgpu_profiler!("rendering", &mut profiler, &mut encoder, &device, {
                     let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: None,
-                        color_attachments: &[wgpu::RenderPassColorAttachment {
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                             view: &frame_view,
                             resolve_target: None,
                             ops: wgpu::Operations {
@@ -146,7 +146,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                                 }),
                                 store: true,
                             },
-                        }],
+                        })],
                         depth_stencil_attachment: None,
                     });
 

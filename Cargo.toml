@@ -13,9 +13,9 @@ resolver="2"
 [lib]
 
 [dependencies]
-wgpu = "0.12"
-futures-lite = "1"
+wgpu = "0.13"
 
 [dev-dependencies]
 winit = "0.26.0"
+futures-lite = "1"
 #env_logger = "0.8.2"
