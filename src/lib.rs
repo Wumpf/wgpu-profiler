@@ -70,6 +70,7 @@ impl GpuProfiler {
             active_frame: PendingFrame {
                 query_pools: Vec::new(),
                 mapped_buffers: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+                frame_dropped: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
                 closed_scopes: Vec::new(),
             },
             open_scopes: Vec::new(),
@@ -174,6 +175,7 @@ impl GpuProfiler {
         if self.pending_frames.len() == self.max_num_pending_frames {
             // Drop previous frame.
             let dropped_frame = self.pending_frames.pop().unwrap();
+            dropped_frame.frame_dropped.store(true, std::sync::atomic::Ordering::SeqCst);
             self.cache_unused_query_pools(dropped_frame.query_pools);
             // TODO report this somehow
         }
@@ -181,7 +183,12 @@ impl GpuProfiler {
         // Map all buffers.
         for pool in self.active_frame.query_pools.iter_mut() {
             let mapped_buffers = self.active_frame.mapped_buffers.clone();
+            let frame_dropped = self.active_frame.frame_dropped.clone();
             pool.resolved_buffer_slice().map_async(wgpu::MapMode::Read, move |res| {
+                if frame_dropped.load(std::sync::atomic::Ordering::SeqCst) {
+                    return;
+                };
+
                 res.unwrap();
                 mapped_buffers.fetch_add(1, std::sync::atomic::Ordering::Release);
             });
@@ -379,6 +386,7 @@ impl QueryPool {
 struct PendingFrame {
     query_pools: Vec<QueryPool>,
     mapped_buffers: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    frame_dropped: std::sync::Arc<std::sync::atomic::AtomicBool>,
     closed_scopes: Vec<UnprocessedTimerScope>,
 }
 
