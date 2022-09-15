@@ -60,8 +60,8 @@ impl GpuProfiler {
     pub fn new(max_num_pending_frames: usize, timestamp_period: f32, active_features: wgpu::Features) -> Self {
         assert!(max_num_pending_frames > 0);
         GpuProfiler {
-            enable_pass_timer: active_features.contains(wgpu::Features::TIMESTAMP_QUERY),
-            enable_encoder_timer: active_features.contains(wgpu::Features::WRITE_TIMESTAMP_INSIDE_PASSES),
+            enable_pass_timer: active_features.contains(wgpu::Features::WRITE_TIMESTAMP_INSIDE_PASSES),
+            enable_encoder_timer: active_features.contains(wgpu::Features::TIMESTAMP_QUERY),
             enable_debug_marker: true,
 
             unused_pools: Vec::new(),
