@@ -1,3 +1,81 @@
+#![allow(rustdoc::private_intra_doc_links)]
+/*!
+
+Easy to use profiler scopes for [wgpu](https://github.com/gfx-rs/wgpu) using timer queries.
+
+wgpu_profile manages all the necessary [wgpu::QuerySet] and [wgpu::Buffer] behind the scenes
+and allows you to create to create timer scopes with minimal overhead!
+
+# How to use
+
+```
+use wgpu_profiler::*;
+
+# async fn wgpu_init() -> (wgpu::Instance, wgpu::Adapter, wgpu::Device, wgpu::Queue) {
+    # let instance = wgpu::Instance::new(wgpu::Backends::all());
+    # let adapter = instance.request_adapter(&wgpu::RequestAdapterOptions::default()).await.unwrap();
+    # let (device, queue) = adapter
+    #     .request_device(
+    #         &wgpu::DeviceDescriptor {
+    #             features: wgpu::Features::TIMESTAMP_QUERY,
+    #             ..Default::default()
+    #         },
+    #         None,
+    #     )
+    #     .await
+    #     .unwrap();
+    # (instance, adapter, device, queue)
+# }
+# let (instance, adapter, device, queue) = futures_lite::future::block_on(wgpu_init());
+// ...
+
+let mut profiler = GpuProfiler::new(4, queue.get_timestamp_period(), device.features());
+
+// ...
+
+# let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+// Using scopes is easiest with the macro:
+wgpu_profiler!("name of your scope", &mut profiler, &mut encoder, &device, {
+  // wgpu commands go here
+});
+
+// Wgpu-profiler needs to insert buffer copy commands.
+profiler.resolve_queries(&mut encoder);
+# drop(encoder);
+
+// ...
+
+// And finally, to end a profiling frame, call `end_frame`.
+// This does a few checks and will let you know of something is off!
+profiler.end_frame().unwrap();
+
+// Retrieving the oldest available frame and writing it out to a chrome trace file.
+if let Some(profiling_data) = profiler.process_finished_frame() {
+    # let button_pressed = false;
+    // You usually want to write to disk only under some condition, e.g. press of a key.
+    if button_pressed {
+        wgpu_profiler::chrometrace::write_chrometrace(
+            std::path::Path::new("mytrace.json"), &profiling_data);
+    }
+}
+```
+Check also the [Example](https://github.com/Wumpf/wgpu-profiler/blob/main/examples/demo.rs) where everything can be seen in action.
+
+# Internals
+
+For every frame that hasn't completely finished processing yet
+(i.e. hasn't returned results via [process_finished_frame](GpuProfiler::process_finished_frame))
+we keep a [PendingFrame] around.
+
+Whenever a profiling scope is opened, we allocate two queries.
+This is done by either using the most recent [QueryPool] or creating a new one if there's no non-exhausted one ready.
+Ideally, we only ever need a single [QueryPool] per frame! In order to converge to this,
+we allocate new query pools with the size of all previous query pools in a given frame, effectively doubling the size.
+On [GpuProfiler::end_frame], we memorize the total size of all [QueryPool]s in the current frame and make this the new minimum pool size.
+
+[QueryPool] from finished frames are re-used, unless they are deemed too small.
+*/
+
 use std::{convert::TryInto, ops::Range};
 
 pub mod chrometrace;
@@ -31,7 +109,6 @@ pub struct GpuProfiler {
 }
 
 // Public interface
-#[deny(missing_docs)]
 impl GpuProfiler {
     /// Combination of all timer query features GpuProfiler can leverage.
     pub const ALL_WGPU_TIMER_FEATURES: wgpu::Features = wgpu::Features::TIMESTAMP_QUERY.union(wgpu::Features::WRITE_TIMESTAMP_INSIDE_PASSES);
@@ -147,7 +224,7 @@ impl GpuProfiler {
     }
 
     /// Marks the end of a frame.
-    /// Needs to be called AFTER submitting any encoder used in the current frame.
+    /// Needs to be called **after** submitting any encoder used in the current frame.
     #[allow(clippy::result_unit_err)]
     pub fn end_frame(&mut self) -> Result<(), ()> {
         // TODO: Error messages
