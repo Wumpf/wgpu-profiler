@@ -66,7 +66,7 @@ impl GpuProfiler {
 
             unused_pools: Vec::new(),
 
-            pending_frames: Vec::new(),
+            pending_frames: Vec::with_capacity(max_num_pending_frames),
             active_frame: PendingFrame {
                 query_pools: Vec::new(),
                 mapped_buffers: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
@@ -172,18 +172,32 @@ impl GpuProfiler {
 
         // Make sure we don't overflow
         if self.pending_frames.len() == self.max_num_pending_frames {
-            // Drop previous frame.
+            // Drop previous (!) frame.
+            // Dropping the oldest frame could get us into an endless cycle where we're never able to complete
+            // any pending frames as the ones closest to completion would be evicted.
             let dropped_frame = self.pending_frames.pop().unwrap();
-            self.cache_unused_query_pools(dropped_frame.query_pools);
-            // TODO report this somehow
+
+            // Mark the frame as dropped. We'll give back the query pools once the mapping is done.
+            // Any previously issued map_async call that haven't finished yet, will invoke their callback with mapping abort.
+            self.reset_and_cache_unused_query_pools(dropped_frame.query_pools);
         }
 
         // Map all buffers.
         for pool in self.active_frame.query_pools.iter_mut() {
             let mapped_buffers = self.active_frame.mapped_buffers.clone();
-            pool.resolved_buffer_slice().map_async(wgpu::MapMode::Read, move |res| {
-                res.unwrap();
-                mapped_buffers.fetch_add(1, std::sync::atomic::Ordering::Release);
+            pool.resolved_buffer_slice().map_async(wgpu::MapMode::Read, move |mapping_result| {
+                // Mapping should not fail unless it was cancelled due to the frame being dropped.
+                match mapping_result {
+                    Err(_) => {
+                        // We only want to ignore the error iff the mapping has been aborted by us (due to a dropped frame, see above).
+                        // In any other case, we need should panic as this would imply something went seriously sideways.
+                        //
+                        // As of writing, this is not yet possible in wgpu, see https://github.com/gfx-rs/wgpu/pull/2939
+                    }
+                    Ok(()) => {
+                        mapped_buffers.fetch_add(1, std::sync::atomic::Ordering::Release);
+                    }
+                }
             });
         }
 
@@ -217,7 +231,7 @@ impl GpuProfiler {
             Self::process_timings_recursive(self.timestamp_to_sec, &resolved_query_buffers, frame.closed_scopes)
         };
 
-        self.cache_unused_query_pools(frame.query_pools);
+        self.reset_and_cache_unused_query_pools(frame.query_pools);
 
         Some(results)
     }
@@ -231,7 +245,7 @@ const QUERY_SIZE: u32 = 8; // Newer wgpu version have QUERY_SIZE
 const QUERY_SET_MAX_QUERIES: u32 = 8192; // Newer wgpu version have QUERY_SET_MAX_QUERIES
 
 impl GpuProfiler {
-    fn cache_unused_query_pools(&mut self, mut query_pools: Vec<QueryPool>) {
+    fn reset_and_cache_unused_query_pools(&mut self, mut query_pools: Vec<QueryPool>) {
         // If a pool was less than half of the size of the max frame, then we don't keep it.
         // This way we're going to need less pools in upcoming frames and thus have less overhead in the long run.
         let capacity_threshold = self.size_for_new_query_pools / 2;
