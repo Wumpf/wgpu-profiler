@@ -2,8 +2,6 @@ use std::{convert::TryInto, ops::Range};
 
 pub mod chrometrace;
 pub mod macros;
-/// Scope types that wrap a `wgpu` encoder/pass and start a scope on creation. In most cases, they
-/// then allow automatically ending the scope on drop.
 pub mod scope;
 
 pub struct GpuTimerScopeResult {
@@ -330,6 +328,7 @@ struct UnprocessedTimerScope {
     nested_scopes: Vec<UnprocessedTimerScope>,
 }
 
+/// A pool of queries, consisting of a single queryset & buffer for query results.
 struct QueryPool {
     query_set: wgpu::QuerySet,
 

@@ -2,7 +2,7 @@ use std::{fs::File, io::Write, path::Path};
 
 use crate::GpuTimerScopeResult;
 
-/// Writes a .json trace file that can be viewed as a flame graph in Chrome via chrome://tracing
+/// Writes a .json trace file that can be viewed as a flame graph in Chrome or Edge via chrome://tracing
 pub fn write_chrometrace(target: &Path, profile_data: &[GpuTimerScopeResult]) -> std::io::Result<()> {
     let mut file = File::create(target)?;
 

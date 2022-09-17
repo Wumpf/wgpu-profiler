@@ -56,7 +56,7 @@ if let Some(profiling_data) = profiler.process_finished_frame() {
 ```
 
 
-To get a look of it in action, check out the example project!
+To get a look of it in action, check out the [example](./examples/demo.rs)  project!
 
 ## License
 
