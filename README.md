@@ -26,7 +26,7 @@ Create a new profiler object:
 ```rust
 use wgpu_profiler::{wgpu_profiler, GpuProfiler};
 // ...
-let mut profiler = GpuProfiler::new(4, adapter.get_timestamp_period()); // buffer up to 4 frames
+let mut profiler = GpuProfiler::new(4, queue.get_timestamp_period(), device.features()); // buffer up to 4 frames
 ```
 
 Using scopes is easiest with the macro:
@@ -35,7 +35,8 @@ wgpu_profiler!("name of your scope", &mut profiler, &mut encoder, &device, {
   // wgpu commands go here
 });
 ```
-Unless you disable timer scoping (`wgpu_profile` will still emit debug scopes), your wgpu device needs `wgpu::Features::TIMESTAMP_QUERY` enabled.
+Note that `GpuProfiler` reads the device features - if your wgpu device doesn't have `wgpu::Features::TIMESTAMP_QUERY` enabled, it will automatically not attempt to emit any timer queries.
+Similarly, if `wgpu::Features::WRITE_TIMESTAMP_INSIDE_PASSES` is not present, no queries will be issued from inside passes.
 
 Wgpu-profiler needs to insert buffer copy commands, so when you're done with an encoder and won't do any more profiling scopes on it, you need to resolve the queries:
 ```rust
@@ -51,12 +52,12 @@ Retrieving the oldest available frame and writing it out to a chrome trace file.
 ```rust
 if let Some(profiling_data) = profiler.process_finished_frame() {
     // You usually want to write to disk only under some condition, e.g. press of a key or button
-    wgpu_profiler::chrometrace::write_chrometrace(Path::new("mytrace.json"), profiling_data);
+    wgpu_profiler::chrometrace::write_chrometrace(std::path::Path::new("mytrace.json"), &profiling_data);
 }
 ```
 
 
-To get a look of it in action, check out the example project!
+To get a look of it in action, check out the [example](./examples/demo.rs)  project!
 
 ## License
 
