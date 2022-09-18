@@ -1,9 +1,8 @@
-#![allow(rustdoc::private_intra_doc_links)]
 /*!
 
 Easy to use profiler scopes for [wgpu](https://github.com/gfx-rs/wgpu) using timer queries.
 
-wgpu_profile manages all the necessary [wgpu::QuerySet] and [wgpu::Buffer] behind the scenes
+wgpu_profiler manages all the necessary [`wgpu::QuerySet`] and [`wgpu::Buffer`] behind the scenes
 and allows you to create to create timer scopes with minimal overhead!
 
 # How to use
@@ -64,16 +63,16 @@ Check also the [Example](https://github.com/Wumpf/wgpu-profiler/blob/main/exampl
 # Internals
 
 For every frame that hasn't completely finished processing yet
-(i.e. hasn't returned results via [process_finished_frame](GpuProfiler::process_finished_frame))
-we keep a [PendingFrame] around.
+(i.e. hasn't returned results via [`process_finished_frame`](GpuProfiler::process_finished_frame))
+we keep a `PendingFrame` around.
 
 Whenever a profiling scope is opened, we allocate two queries.
-This is done by either using the most recent [QueryPool] or creating a new one if there's no non-exhausted one ready.
-Ideally, we only ever need a single [QueryPool] per frame! In order to converge to this,
+This is done by either using the most recent `QueryPool` or creating a new one if there's no non-exhausted one ready.
+Ideally, we only ever need a single `QueryPool` per frame! In order to converge to this,
 we allocate new query pools with the size of all previous query pools in a given frame, effectively doubling the size.
-On [GpuProfiler::end_frame], we memorize the total size of all [QueryPool]s in the current frame and make this the new minimum pool size.
+On [`GpuProfiler::end_frame`], we memorize the total size of all `QueryPool`s in the current frame and make this the new minimum pool size.
 
-[QueryPool] from finished frames are re-used, unless they are deemed too small.
+`QueryPool` from finished frames are re-used, unless they are deemed too small.
 */
 
 use std::{convert::TryInto, ops::Range};

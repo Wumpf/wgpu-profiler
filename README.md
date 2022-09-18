@@ -35,8 +35,8 @@ wgpu_profiler!("name of your scope", &mut profiler, &mut encoder, &device, {
   // wgpu commands go here
 });
 ```
-Note that `GpuProfiler` reads the device features - if your wgpu device doesn't support `wgpu::Features::TIMESTAMP_QUERY`, it will automatically not attempt to emit any timer queries.
-(similar, if `wgpu::Features::WRITE_TIMESTAMP_INSIDE_PASSES` is not present, no queries will be issued from inside passes)
+Note that `GpuProfiler` reads the device features - if your wgpu device doesn't have `wgpu::Features::TIMESTAMP_QUERY` enabled, it will automatically not attempt to emit any timer queries.
+Similarly, if `wgpu::Features::WRITE_TIMESTAMP_INSIDE_PASSES` is not present, no queries will be issued from inside passes.
 
 Wgpu-profiler needs to insert buffer copy commands, so when you're done with an encoder and won't do any more profiling scopes on it, you need to resolve the queries:
 ```rust
