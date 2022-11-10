@@ -1,21 +1,21 @@
 [package]
 name = "wgpu-profiler"
-version = "0.9.1"
+version = "0.10.0"
 authors = ["Andreas Reich <r_andreas2@web.de>"]
-edition = "2018"
+edition = "2021"
 description = "Simple profiler scopes for wgpu using timer queries"
 homepage = "https://github.com/Wumpf/wgpu-profiler"
 repository = "https://github.com/Wumpf/wgpu-profiler"
 keywords = ["graphics"]
 license = "MIT OR Apache-2.0"
-resolver="2"
+resolver = "2"
 
 [lib]
 
 [dependencies]
-wgpu = "0.13"
+wgpu = "0.14.0"
 
 [dev-dependencies]
-winit = "0.26.0"
+winit = "0.27.5"
 futures-lite = "1"
 #env_logger = "0.8.2"
