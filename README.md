@@ -79,7 +79,7 @@ dual licensed as above, without any additional terms or conditions.
 ## Changelog
 
 * 0.10.0
-  * Upgrade to wgpu 0.14, bump version, and switch to rust 2021 edition, by @Imberflur in [#23](https://github.com/Wumpf/wgpu-profiler/pull/23)
+  * Upgrade to wgpu 0.14 and switch to rust 2021 edition, by @Imberflur in [#23](https://github.com/Wumpf/wgpu-profiler/pull/23)
 * 0.9.1
   * Better docs [#21](https://github.com/Wumpf/wgpu-profiler/pull/21)
   * Fix crash on dropped frame [#20](https://github.com/Wumpf/wgpu-profiler/pull/20), reported by @JCapucho in [#19](https://github.com/Wumpf/wgpu-profiler/pull/19)
