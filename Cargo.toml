@@ -13,7 +13,7 @@ resolver = "2"
 [lib]
 
 [dependencies]
-wgpu = "0.14.0"
+wgpu = "0.15"
 
 [dev-dependencies]
 winit = "0.27.5"
