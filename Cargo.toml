@@ -1,6 +1,6 @@
 [package]
 name = "wgpu-profiler"
-version = "0.10.0"
+version = "0.11.0"
 authors = ["Andreas Reich <r_andreas2@web.de>"]
 edition = "2021"
 description = "Simple profiler scopes for wgpu using timer queries"
