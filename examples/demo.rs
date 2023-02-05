@@ -18,9 +18,12 @@ fn scopes_to_console_recursive(results: &[GpuTimerScopeResult], indentation: u32
     }
 }
 
-fn console_output(results: &Option<Vec<GpuTimerScopeResult>>) {
+fn console_output(results: &Option<Vec<GpuTimerScopeResult>>, enabled_features: wgpu::Features) {
     print!("\x1B[2J\x1B[1;1H"); // Clear terminal and put cursor to first row first column
     println!("Welcome to wgpu_profiler demo!");
+    println!();
+    println!("Enabled device features: {:?}", enabled_features);
+    println!();
     println!("Press space to write out a trace file that can be viewed in chrome's chrome://tracing");
     println!();
     match results {
@@ -33,8 +36,11 @@ fn console_output(results: &Option<Vec<GpuTimerScopeResult>>) {
 
 async fn run(event_loop: EventLoop<()>, window: Window) {
     let size = window.inner_size();
-    let instance = wgpu::Instance::new(wgpu::Backends::all());
-    let surface = unsafe { instance.create_surface(&window) };
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::all(),
+        dx12_shader_compiler: wgpu::Dx12Compiler::default(),
+    });
+    let surface = unsafe { instance.create_surface(&window) }.expect("Failed to create surface.");
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::default(),
@@ -44,11 +50,13 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         .await
         .expect("Failed to find an appropriate adapter");
 
+    dbg!(adapter.features());
+
     let (device, queue) = adapter
         .request_device(
             &wgpu::DeviceDescriptor {
                 label: None,
-                features: GpuProfiler::ALL_WGPU_TIMER_FEATURES,
+                features: adapter.features() & GpuProfiler::ALL_WGPU_TIMER_FEATURES,
                 limits: wgpu::Limits::default(),
             },
             None,
@@ -67,7 +75,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         push_constant_ranges: &[],
     });
 
-    let swapchain_format = surface.get_supported_formats(&adapter)[0];
+    let swapchain_format = *surface.get_capabilities(&adapter).formats.first().unwrap();
 
     let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: None,
@@ -97,6 +105,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         // Profiler works just fine in any other mode, but keep in mind that this can mean that it would need to buffer up many more frames until the first results are back.
         present_mode: wgpu::PresentMode::Fifo,
         alpha_mode: wgpu::CompositeAlphaMode::Auto,
+        view_formats: vec![swapchain_format],
     };
 
     surface.configure(&device, &sc_desc);
@@ -188,7 +197,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 if let Some(results) = profiler.process_finished_frame() {
                     latest_profiler_results = Some(results);
                 }
-                console_output(&latest_profiler_results);
+                console_output(&latest_profiler_results, device.features());
             }
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => {
