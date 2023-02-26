@@ -11,7 +11,7 @@ and allows you to create to create timer scopes with minimal overhead!
 use wgpu_profiler::*;
 
 # async fn wgpu_init() -> (wgpu::Instance, wgpu::Adapter, wgpu::Device, wgpu::Queue) {
-    # let instance = wgpu::Instance::new(wgpu::Backends::all());
+    # let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
     # let adapter = instance.request_adapter(&wgpu::RequestAdapterOptions::default()).await.unwrap();
     # let (device, queue) = adapter
     #     .request_device(
@@ -63,7 +63,7 @@ Check also the [Example](https://github.com/Wumpf/wgpu-profiler/blob/main/exampl
 # Internals
 
 For every frame that hasn't completely finished processing yet
-(i.e. hasn't returned results via [`process_finished_frame`](GpuProfiler::process_finished_frame))
+(i.e. hasn't returned results via [`GpuProfiler::process_finished_frame`])
 we keep a `PendingFrame` around.
 
 Whenever a profiling scope is opened, we allocate two queries.

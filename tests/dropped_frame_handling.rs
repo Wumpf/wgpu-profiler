@@ -5,7 +5,7 @@ fn handle_dropped_frames_gracefully() {
 
 // regression test for bug described in https://github.com/Wumpf/wgpu-profiler/pull/18
 async fn handle_dropped_frames_gracefully_async() {
-    let instance = wgpu::Instance::new(wgpu::Backends::all());
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
     let adapter = instance.request_adapter(&wgpu::RequestAdapterOptions::default()).await.unwrap();
     let (device, queue) = adapter
         .request_device(
