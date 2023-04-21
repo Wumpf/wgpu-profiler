@@ -443,7 +443,7 @@ impl QueryPool {
             buffer: device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("GpuProfiler - Query Buffer"),
                 size: (QUERY_SIZE * capacity) as u64,
-                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                usage: wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::MAP_READ,
                 mapped_at_creation: false,
             }),
 
