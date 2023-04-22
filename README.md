@@ -79,6 +79,8 @@ dual licensed as above, without any additional terms or conditions.
 ## Changelog
 
 * 0.11.0
+  * Upgrade to wgpu 0.16, by @davidster in [#26](https://github.com/Wumpf/wgpu-profiler/pull/26)
+* 0.11.0
   * Upgrade to wgpu 0.15
 * 0.10.0
   * Upgrade to wgpu 0.14 and switch to rust 2021 edition, by @Imberflur in [#23](https://github.com/Wumpf/wgpu-profiler/pull/23)
