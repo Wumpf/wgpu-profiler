@@ -110,7 +110,7 @@ pub struct GpuProfiler {
 // Public interface
 impl GpuProfiler {
     /// Combination of all timer query features GpuProfiler can leverage.
-    pub const ALL_WGPU_TIMER_FEATURES: wgpu::Features = wgpu::Features::TIMESTAMP_QUERY.union(wgpu::Features::WRITE_TIMESTAMP_INSIDE_PASSES);
+    pub const ALL_WGPU_TIMER_FEATURES: wgpu::Features = wgpu::Features::TIMESTAMP_QUERY.union(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES);
 
     /// Combination of all timer query features GpuProfiler can leverage.
     #[deprecated(since = "0.9.0", note = "Use ALL_WGPU_TIMER_FEATURES instead")]
@@ -134,7 +134,7 @@ impl GpuProfiler {
     pub fn new(max_num_pending_frames: usize, timestamp_period: f32, active_features: wgpu::Features) -> Self {
         assert!(max_num_pending_frames > 0);
         GpuProfiler {
-            enable_pass_timer: active_features.contains(wgpu::Features::WRITE_TIMESTAMP_INSIDE_PASSES),
+            enable_pass_timer: active_features.contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES),
             enable_encoder_timer: active_features.contains(wgpu::Features::TIMESTAMP_QUERY),
             enable_debug_marker: true,
 
@@ -443,7 +443,7 @@ impl QueryPool {
             buffer: device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("GpuProfiler - Query Buffer"),
                 size: (QUERY_SIZE * capacity) as u64,
-                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                usage: wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::MAP_READ,
                 mapped_at_creation: false,
             }),
 
