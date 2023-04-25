@@ -78,7 +78,9 @@ dual licensed as above, without any additional terms or conditions.
 
 ## Changelog
 
-* 0.11.0
+* 0.12.1
+  * Fix wgpu validation error due to mapping of query resolve buffer, by @Davidster [#28](https://github.com/Wumpf/wgpu-profiler/pull/28)
+* 0.12.0
   * Upgrade to wgpu 0.16, by @davidster in [#26](https://github.com/Wumpf/wgpu-profiler/pull/26)
 * 0.11.0
   * Upgrade to wgpu 0.15
