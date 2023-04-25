@@ -211,14 +211,24 @@ impl GpuProfiler {
             if query_pool.num_resolved_queries == query_pool.num_used_queries {
                 continue;
             }
+
             assert!(query_pool.num_resolved_queries < query_pool.num_used_queries);
+
             encoder.resolve_query_set(
                 &query_pool.query_set,
                 query_pool.num_resolved_queries..query_pool.num_used_queries,
-                &query_pool.buffer,
+                &query_pool.resolve_buffer,
                 (query_pool.num_resolved_queries * QUERY_SIZE) as u64,
             );
             query_pool.num_resolved_queries = query_pool.num_used_queries;
+
+            encoder.copy_buffer_to_buffer(
+                &query_pool.resolve_buffer,
+                0,
+                &query_pool.read_buffer,
+                0,
+                (query_pool.num_used_queries * QUERY_SIZE) as u64,
+            );
         }
     }
 
@@ -259,7 +269,7 @@ impl GpuProfiler {
         // Map all buffers.
         for pool in self.active_frame.query_pools.iter_mut() {
             let mapped_buffers = self.active_frame.mapped_buffers.clone();
-            pool.resolved_buffer_slice().map_async(wgpu::MapMode::Read, move |mapping_result| {
+            pool.read_buffer_slice().map_async(wgpu::MapMode::Read, move |mapping_result| {
                 // Mapping should not fail unless it was cancelled due to the frame being dropped.
                 match mapping_result {
                     Err(_) => {
@@ -297,12 +307,9 @@ impl GpuProfiler {
         let frame = self.pending_frames.remove(0);
 
         let results = {
-            let resolved_query_buffers: Vec<wgpu::BufferView> = frame
-                .query_pools
-                .iter()
-                .map(|pool| pool.resolved_buffer_slice().get_mapped_range())
-                .collect();
-            Self::process_timings_recursive(self.timestamp_to_sec, &resolved_query_buffers, frame.closed_scopes)
+            let read_query_buffers: Vec<wgpu::BufferView> =
+                frame.query_pools.iter().map(|pool| pool.read_buffer_slice().get_mapped_range()).collect();
+            Self::process_timings_recursive(self.timestamp_to_sec, &read_query_buffers, frame.closed_scopes)
         };
 
         self.reset_and_cache_unused_query_pools(frame.query_pools);
@@ -422,7 +429,8 @@ struct UnprocessedTimerScope {
 struct QueryPool {
     query_set: wgpu::QuerySet,
 
-    buffer: wgpu::Buffer,
+    resolve_buffer: wgpu::Buffer,
+    read_buffer: wgpu::Buffer,
 
     capacity: u32,
     num_used_queries: u32,
@@ -440,10 +448,17 @@ impl QueryPool {
                 count: capacity,
             }),
 
-            buffer: device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("GpuProfiler - Query Buffer"),
+            resolve_buffer: device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("GpuProfiler - Query Resolve Buffer"),
                 size: (QUERY_SIZE * capacity) as u64,
-                usage: wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::MAP_READ,
+                usage: wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC,
+                mapped_at_creation: false,
+            }),
+
+            read_buffer: device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("GpuProfiler - Query Read Buffer"),
+                size: (QUERY_SIZE * capacity) as u64,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
                 mapped_at_creation: false,
             }),
 
@@ -456,11 +471,11 @@ impl QueryPool {
     fn reset(&mut self) {
         self.num_used_queries = 0;
         self.num_resolved_queries = 0;
-        self.buffer.unmap();
+        self.read_buffer.unmap();
     }
 
-    fn resolved_buffer_slice(&self) -> wgpu::BufferSlice {
-        self.buffer.slice(0..(self.num_resolved_queries * QUERY_SIZE) as u64)
+    fn read_buffer_slice(&self) -> wgpu::BufferSlice {
+        self.read_buffer.slice(0..(self.num_resolved_queries * QUERY_SIZE) as u64)
     }
 }
 
