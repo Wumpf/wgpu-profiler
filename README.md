@@ -18,7 +18,6 @@ Simple profiler scopes for wgpu using timer queries
 * Tracy integration (behind `tracy` feature flag)
 
 TODO:
-* Better error messages
 * Disable via feature flag
 
 ## How to use

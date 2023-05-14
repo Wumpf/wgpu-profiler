@@ -83,15 +83,34 @@ pub mod scope;
 #[cfg(feature = "tracy")]
 pub mod tracy;
 
+/// The result of a gpu timer scope.
 pub struct GpuTimerScopeResult {
+    /// Label that was specified when opening the scope.
     pub label: String,
+
     /// Time range of this scope in seconds.
+    ///
     /// Meaning of absolute value is not defined.
     pub time: Range<f64>,
 
+    /// Scopes that were opened while this scope was open.
     pub nested_scopes: Vec<GpuTimerScopeResult>,
     pub pid: u32,
     pub tid: ThreadId,
+}
+
+/// A wgpu-profiler error.
+#[derive(thiserror::Error, Debug, PartialEq, Eq)]
+pub enum GpuProfilerError {
+    #[error("All profiling scopes need to be closed before ending a frame. The following scopes were still open: {0:?}")]
+    UnclosedScopesAtFrameEnd(Vec<String>),
+
+    #[error(
+        "Not all queries were resolved before ending a frame.\n
+Call `GpuProfiler::resolve_queries` after all profiling scopes have been closed and before ending the frame.\n
+There were still {0} queries unresolved"
+    )]
+    UnresolvedQueriesAtFrameEnd(u32),
 }
 
 pub struct GpuProfiler {
@@ -257,20 +276,24 @@ impl GpuProfiler {
     }
 
     /// Marks the end of a frame.
+    ///
     /// Needs to be called **after** submitting any encoder used in the current frame.
     #[allow(clippy::result_unit_err)]
-    pub fn end_frame(&mut self) -> Result<(), ()> {
-        // TODO: Error messages
+    pub fn end_frame(&mut self) -> Result<(), GpuProfilerError> {
         if !self.open_scopes.is_empty() {
-            return Err(());
+            return Err(GpuProfilerError::UnclosedScopesAtFrameEnd(
+                self.open_scopes.iter().map(|open_scope| open_scope.label.clone()).collect(),
+            ));
         }
-        if self
+
+        let num_unresolved_queries = self
             .active_frame
             .query_pools
             .iter()
-            .any(|pool| pool.num_resolved_queries != pool.num_used_queries)
-        {
-            return Err(());
+            .map(|pool| pool.num_used_queries - pool.num_resolved_queries)
+            .sum();
+        if num_unresolved_queries != 0 {
+            return Err(GpuProfilerError::UnresolvedQueriesAtFrameEnd(num_unresolved_queries));
         }
 
         self.size_for_new_query_pools = self
