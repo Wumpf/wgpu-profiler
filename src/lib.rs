@@ -184,7 +184,8 @@ impl GpuProfiler {
     ///
     /// Scopes can be arbitrarily nested.
     ///
-    /// May create new wgpu query objects (which is why it needs a [`wgpu::Device`] reference)
+    /// May create new wgpu query objects (which is why it needs a [`wgpu::Device`] reference).
+    /// If encoder/pass timer queries are disabled respectively, this function does nothing.
     ///
     /// See also [`wgpu_profiler!`], [`GpuProfiler::end_scope`]
     #[track_caller]
@@ -278,6 +279,9 @@ impl GpuProfiler {
     /// Marks the end of a frame.
     ///
     /// Needs to be called **after** submitting any encoder used in the current frame.
+    ///
+    /// Fails if there are still open scopes or unresolved queries.
+    /// Warning: This validation happens only, if the profiler enabled.
     #[allow(clippy::result_unit_err)]
     pub fn end_frame(&mut self) -> Result<(), GpuProfilerError> {
         if !self.open_scopes.is_empty() {
