@@ -75,7 +75,7 @@ On [`GpuProfiler::end_frame`], we memorize the total size of all `QueryPool`s in
 `QueryPool` from finished frames are re-used, unless they are deemed too small.
 */
 
-use std::{convert::TryInto, ops::Range};
+use std::{convert::TryInto, ops::Range, thread::ThreadId};
 
 pub mod chrometrace;
 pub mod macros;
@@ -86,6 +86,8 @@ pub struct GpuTimerScopeResult {
     /// Time range of this scope in seconds.
     /// Meaning of absolute value is not defined.
     pub time: Range<f64>,
+    pub pid: u32,
+    pub tid: ThreadId,
 
     pub nested_scopes: Vec<GpuTimerScopeResult>,
 }
@@ -383,6 +385,8 @@ impl GpuProfiler {
         resolved_query_buffers: &[wgpu::BufferView],
         unprocessed_scopes: Vec<UnprocessedTimerScope>,
     ) -> Vec<GpuTimerScopeResult> {
+        let pid = std::process::id();
+        let tid = std::thread::current().id();
         unprocessed_scopes
             .into_iter()
             .map(|scope| {
@@ -405,6 +409,8 @@ impl GpuProfiler {
                 GpuTimerScopeResult {
                     label: scope.label,
                     time: (start_raw as f64 * timestamp_to_sec)..(end_raw as f64 * timestamp_to_sec),
+                    pid,
+                    tid,
                     nested_scopes,
                 }
             })
