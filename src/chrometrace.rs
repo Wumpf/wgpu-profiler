@@ -25,9 +25,11 @@ pub fn write_chrometrace(target: &Path, profile_data: &[GpuTimerScopeResult]) ->
 fn write_results_recursive(file: &mut File, result: &GpuTimerScopeResult, last: bool) -> std::io::Result<()> {
     let pid = std::process::id();
     let tid = std::thread::current().id();
+    // hack to convert to integer
+    let tid = format!("{:?}", tid).replace("ThreadId(", "").replace(')', "").parse::<usize>().unwrap();
     write!(
         file,
-        r#"{{ "pid":{}, "tid":{:?}, "ts":{}, "dur":{}, "ph":"X", "name":"{}" }}{}"#,
+        r#"{{ "pid":{}, "tid":{}, "ts":{}, "dur":{}, "ph":"X", "name":"{}" }}{}"#,
         pid,
         tid,
         result.time.start * 1000.0 * 1000.0,
