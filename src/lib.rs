@@ -86,10 +86,10 @@ pub struct GpuTimerScopeResult {
     /// Time range of this scope in seconds.
     /// Meaning of absolute value is not defined.
     pub time: Range<f64>,
-    pub pid: u32,
-    pub tid: ThreadId,
 
     pub nested_scopes: Vec<GpuTimerScopeResult>,
+    pub pid: u32,
+    pub tid: ThreadId,
 }
 
 pub struct GpuProfiler {
@@ -173,10 +173,15 @@ impl GpuProfiler {
                 start_query.query_idx,
             );
 
+            let pid = std::process::id();
+            let tid = std::thread::current().id();
+
             self.open_scopes.push(UnprocessedTimerScope {
                 label: String::from(label),
                 start_query,
-                ..Default::default()
+                nested_scopes: Vec::new(),
+                pid,
+                tid,
             });
         }
         if self.enable_debug_marker {
@@ -385,8 +390,6 @@ impl GpuProfiler {
         resolved_query_buffers: &[wgpu::BufferView],
         unprocessed_scopes: Vec<UnprocessedTimerScope>,
     ) -> Vec<GpuTimerScopeResult> {
-        let pid = std::process::id();
-        let tid = std::thread::current().id();
         unprocessed_scopes
             .into_iter()
             .map(|scope| {
@@ -409,9 +412,9 @@ impl GpuProfiler {
                 GpuTimerScopeResult {
                     label: scope.label,
                     time: (start_raw as f64 * timestamp_to_sec)..(end_raw as f64 * timestamp_to_sec),
-                    pid,
-                    tid,
                     nested_scopes,
+                    pid: scope.pid,
+                    tid: scope.tid,
                 }
             })
             .collect()
@@ -424,11 +427,12 @@ struct QueryPoolQueryAddress {
     query_idx: u32,
 }
 
-#[derive(Default)]
 struct UnprocessedTimerScope {
     label: String,
     start_query: QueryPoolQueryAddress,
     nested_scopes: Vec<UnprocessedTimerScope>,
+    pub pid: u32,
+    pub tid: ThreadId,
 }
 
 /// A pool of queries, consisting of a single queryset & buffer for query results.
