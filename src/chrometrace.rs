@@ -23,8 +23,20 @@ pub fn write_chrometrace(target: &Path, profile_data: &[GpuTimerScopeResult]) ->
 }
 
 fn write_results_recursive(file: &mut File, result: &GpuTimerScopeResult, last: bool) -> std::io::Result<()> {
-    // hack to convert to integer
-    let tid_to_int = |tid| format!("{:?}", tid).replace("ThreadId(", "").replace(')', "").parse::<usize>().unwrap();
+    // note: ThreadIds are under the control of Rust’s standard library
+    // and there may not be any relationship between ThreadId and the underlying platform’s notion of a thread identifier
+    //
+    // There's a proposal for stabilization of ThreadId::as_u64, which
+    // would eliminate the need for this hack: https://github.com/rust-lang/rust/pull/110738
+    //
+    // for now, we use this hack to convert to integer
+    let tid_to_int = |tid| {
+        format!("{:?}", tid)
+            .replace("ThreadId(", "")
+            .replace(')', "")
+            .parse::<u64>()
+            .unwrap_or(std::u64::MAX)
+    };
     write!(
         file,
         r#"{{ "pid":{}, "tid":{}, "ts":{}, "dur":{}, "ph":"X", "name":"{}" }}{}"#,
