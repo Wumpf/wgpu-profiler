@@ -75,7 +75,7 @@ On [`GpuProfiler::end_frame`], we memorize the total size of all `QueryPool`s in
 `QueryPool` from finished frames are re-used, unless they are deemed too small.
 */
 
-use std::{convert::TryInto, ops::Range};
+use std::{convert::TryInto, ops::Range, thread::ThreadId};
 
 pub mod chrometrace;
 pub mod macros;
@@ -88,6 +88,8 @@ pub struct GpuTimerScopeResult {
     pub time: Range<f64>,
 
     pub nested_scopes: Vec<GpuTimerScopeResult>,
+    pub pid: u32,
+    pub tid: ThreadId,
 }
 
 pub struct GpuProfiler {
@@ -171,10 +173,15 @@ impl GpuProfiler {
                 start_query.query_idx,
             );
 
+            let pid = std::process::id();
+            let tid = std::thread::current().id();
+
             self.open_scopes.push(UnprocessedTimerScope {
                 label: String::from(label),
                 start_query,
-                ..Default::default()
+                nested_scopes: Vec::new(),
+                pid,
+                tid,
             });
         }
         if self.enable_debug_marker {
@@ -406,6 +413,8 @@ impl GpuProfiler {
                     label: scope.label,
                     time: (start_raw as f64 * timestamp_to_sec)..(end_raw as f64 * timestamp_to_sec),
                     nested_scopes,
+                    pid: scope.pid,
+                    tid: scope.tid,
                 }
             })
             .collect()
@@ -418,11 +427,12 @@ struct QueryPoolQueryAddress {
     query_idx: u32,
 }
 
-#[derive(Default)]
 struct UnprocessedTimerScope {
     label: String,
     start_query: QueryPoolQueryAddress,
     nested_scopes: Vec<UnprocessedTimerScope>,
+    pub pid: u32,
+    pub tid: ThreadId,
 }
 
 /// A pool of queries, consisting of a single queryset & buffer for query results.
