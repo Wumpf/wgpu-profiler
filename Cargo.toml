@@ -16,6 +16,6 @@ resolver = "2"
 wgpu = "0.16"
 
 [dev-dependencies]
-winit = "0.27.5"
+winit = "0.28"
 futures-lite = "1"
 #env_logger = "0.8.2"
