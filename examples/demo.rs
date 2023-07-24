@@ -28,7 +28,7 @@ fn console_output(results: &Option<Vec<GpuTimerScopeResult>>, enabled_features: 
     println!();
     match results {
         Some(results) => {
-            scopes_to_console_recursive(&results, 0);
+            scopes_to_console_recursive(results, 0);
         }
         None => println!("No profiling results available yet!"),
     }
