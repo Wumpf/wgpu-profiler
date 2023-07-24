@@ -45,7 +45,7 @@ profiler.resolve_queries(&mut encoder);
 // ...
 
 // And finally, to end a profiling frame, call `end_frame`.
-// This does a few checks and will let you know of something is off!
+// This does a few checks and will let you know if something is off!
 profiler.end_frame().unwrap();
 
 // Retrieving the oldest available frame and writing it out to a chrome trace file.
