@@ -43,7 +43,7 @@ Wgpu-profiler needs to insert buffer copy commands, so when you're done with an 
 profiler.resolve_queries(&mut encoder);
 ```
 
-And finally, to end a profiling frame, call `end_frame`. This does a few checks and will let you know of something is off!
+And finally, to end a profiling frame, call `end_frame`. This does a few checks and will let you know if something is off!
 ```rust
 profiler.end_frame().unwrap();
 ```
