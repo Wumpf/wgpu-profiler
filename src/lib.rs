@@ -80,6 +80,8 @@ use std::{convert::TryInto, ops::Range, thread::ThreadId};
 pub mod chrometrace;
 pub mod macros;
 pub mod scope;
+#[cfg(feature = "tracy")]
+pub mod tracy;
 
 pub struct GpuTimerScopeResult {
     pub label: String,
@@ -107,6 +109,9 @@ pub struct GpuProfiler {
 
     max_num_pending_frames: usize,
     timestamp_to_sec: f64,
+
+    #[cfg(feature = "tracy")]
+    tracy_context: tracy_client::GpuContext,
 }
 
 // Public interface
@@ -133,8 +138,10 @@ impl GpuProfiler {
     /// (Typical values for `max_num_pending_frames` are 2~4)
     ///
     /// `timestamp_period` needs to be set to the result of [`wgpu::Queue::get_timestamp_period`]
-    pub fn new(max_num_pending_frames: usize, timestamp_period: f32, active_features: wgpu::Features) -> Self {
+    pub fn new(_adapter: &wgpu::Adapter, device: &wgpu::Device, queue: &wgpu::Queue, max_num_pending_frames: usize) -> Self {
         assert!(max_num_pending_frames > 0);
+        let active_features = device.features();
+        let timestamp_period = queue.get_timestamp_period();
         GpuProfiler {
             enable_pass_timer: active_features.contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES),
             enable_encoder_timer: active_features.contains(wgpu::Features::TIMESTAMP_QUERY),
@@ -154,6 +161,9 @@ impl GpuProfiler {
 
             max_num_pending_frames,
             timestamp_to_sec: timestamp_period as f64 / 1000.0 / 1000.0 / 1000.0,
+
+            #[cfg(feature = "tracy")]
+            tracy_context: tracy::create_tracy_gpu_client(_adapter.get_info().backend, device, queue, timestamp_period),
         }
     }
 
@@ -164,6 +174,7 @@ impl GpuProfiler {
     /// May create new wgpu query objects (which is why it needs a [`wgpu::Device`] reference)
     ///
     /// See also [`wgpu_profiler!`], [`GpuProfiler::end_scope`]
+    #[track_caller]
     pub fn begin_scope<Recorder: ProfilerCommandRecorder>(&mut self, label: &str, encoder_or_pass: &mut Recorder, device: &wgpu::Device) {
         if (encoder_or_pass.is_pass() && self.enable_pass_timer) || (!encoder_or_pass.is_pass() && self.enable_encoder_timer) {
             let start_query = self.allocate_query_pair(device);
@@ -176,12 +187,16 @@ impl GpuProfiler {
             let pid = std::process::id();
             let tid = std::thread::current().id();
 
+            let _location = std::panic::Location::caller();
+
             self.open_scopes.push(UnprocessedTimerScope {
                 label: String::from(label),
                 start_query,
                 nested_scopes: Vec::new(),
                 pid,
                 tid,
+                #[cfg(feature = "tracy")]
+                tracy_scope: self.tracy_context.span_alloc(label, "", _location.file(), _location.line()).ok(),
             });
         }
         if self.enable_debug_marker {
@@ -196,11 +211,19 @@ impl GpuProfiler {
     /// See also [`wgpu_profiler!`], [`GpuProfiler::begin_scope`]
     pub fn end_scope<Recorder: ProfilerCommandRecorder>(&mut self, encoder_or_pass: &mut Recorder) {
         if (encoder_or_pass.is_pass() && self.enable_pass_timer) || (!encoder_or_pass.is_pass() && self.enable_encoder_timer) {
-            let open_scope = self.open_scopes.pop().expect("No profiler GpuProfiler scope was previously opened");
+            let mut open_scope = self.open_scopes.pop().expect("No profiler GpuProfiler scope was previously opened");
             encoder_or_pass.write_timestamp(
                 &self.active_frame.query_pools[open_scope.start_query.pool_idx as usize].query_set,
                 open_scope.start_query.query_idx + 1,
             );
+            
+            #[cfg(feature = "tracy")]
+            if let Some(ref mut tracy_scope) = open_scope.tracy_scope {
+                tracy_scope.end_zone();
+            }
+            #[cfg(not(feature = "tracy"))]
+            let _ = &mut open_scope;
+
             if let Some(open_parent_scope) = self.open_scopes.last_mut() {
                 open_parent_scope.nested_scopes.push(open_scope);
             } else {
@@ -329,8 +352,8 @@ impl GpuProfiler {
 // Internals
 // --------------------------------------------------------------------------------
 
-const QUERY_SIZE: u32 = 8; // Newer wgpu version have QUERY_SIZE
-const QUERY_SET_MAX_QUERIES: u32 = 8192; // Newer wgpu version have QUERY_SET_MAX_QUERIES
+const QUERY_SIZE: u32 = wgpu::QUERY_SIZE;
+const QUERY_SET_MAX_QUERIES: u32 = wgpu::QUERY_SET_MAX_QUERIES;
 
 impl GpuProfiler {
     fn reset_and_cache_unused_query_pools(&mut self, mut query_pools: Vec<QueryPool>) {
@@ -409,6 +432,11 @@ impl GpuProfiler {
                         .unwrap(),
                 );
 
+                #[cfg(feature = "tracy")]
+                if let Some(tracy_scope) = scope.tracy_scope {
+                    tracy_scope.upload_timestamp(start_raw as i64, end_raw as i64);
+                }
+
                 GpuTimerScopeResult {
                     label: scope.label,
                     time: (start_raw as f64 * timestamp_to_sec)..(end_raw as f64 * timestamp_to_sec),
@@ -433,6 +461,8 @@ struct UnprocessedTimerScope {
     nested_scopes: Vec<UnprocessedTimerScope>,
     pub pid: u32,
     pub tid: ThreadId,
+    #[cfg(feature = "tracy")]
+    tracy_scope: Option<tracy_client::GpuSpan>,
 }
 
 /// A pool of queries, consisting of a single queryset & buffer for query results.

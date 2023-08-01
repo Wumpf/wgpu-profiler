@@ -8,14 +8,22 @@ homepage = "https://github.com/Wumpf/wgpu-profiler"
 repository = "https://github.com/Wumpf/wgpu-profiler"
 keywords = ["graphics"]
 license = "MIT OR Apache-2.0"
-resolver = "2"
+
+[features]
+tracy = ["tracy-client", "profiling/profile-with-tracy"]
 
 [lib]
 
 [dependencies]
+tracy-client = { version = "0.15", optional = true }
 wgpu = "0.17"
 
 [dev-dependencies]
+profiling = { version = "1" }
+tracy-client = "0.15"
 winit = "0.28"
 futures-lite = "1"
 #env_logger = "0.8.2"
+
+[patch.crates-io]
+tracy-client = { git = "https://github.com/cwfitzgerald/rust_tracy_client.git", rev = "1be35c854a7c22e09063ca25efe4438e606c6b50" }

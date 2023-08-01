@@ -19,6 +19,7 @@ fn scopes_to_console_recursive(results: &[GpuTimerScopeResult], indentation: u32
 }
 
 fn console_output(results: &Option<Vec<GpuTimerScopeResult>>, enabled_features: wgpu::Features) {
+    profiling::scope!("console_output");
     print!("\x1B[2J\x1B[1;1H"); // Clear terminal and put cursor to first row first column
     println!("Welcome to wgpu_profiler demo!");
     println!();
@@ -37,7 +38,7 @@ fn console_output(results: &Option<Vec<GpuTimerScopeResult>>, enabled_features: 
 async fn run(event_loop: EventLoop<()>, window: Window) {
     let size = window.inner_size();
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::all(),
+        backends: wgpu::Backends::DX12,
         dx12_shader_compiler: wgpu::Dx12Compiler::default(),
     });
     let surface = unsafe { instance.create_surface(&window) }.expect("Failed to create surface.");
@@ -111,7 +112,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     surface.configure(&device, &sc_desc);
 
     // Create a new profiler instance
-    let mut profiler = GpuProfiler::new(4, queue.get_timestamp_period(), device.features());
+    let mut profiler = GpuProfiler::new(&adapter, &device, &queue, 4);
     let mut latest_profiler_results = None;
 
     event_loop.run(move |event, _, control_flow| {
@@ -137,11 +138,15 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 window.request_redraw();
             }
             Event::RedrawRequested(_) => {
+                profiling::scope!("Redraw Requested");
+
                 let frame = surface.get_current_texture().expect("Failed to acquire next surface texture");
                 let frame_view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
                 let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
                 wgpu_profiler!("rendering", &mut profiler, &mut encoder, &device, {
+                    profiling::scope!("Rendering");
+
                     let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: None,
                         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -188,8 +193,16 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 // Resolves any queries that might be in flight.
                 profiler.resolve_queries(&mut encoder);
 
-                queue.submit(Some(encoder.finish()));
-                frame.present();
+                {
+                    profiling::scope!("Submit");
+                    queue.submit(Some(encoder.finish()));
+                }
+                {
+                    profiling::scope!("Present");
+                    frame.present();
+                }
+
+                profiling::finish_frame!();
 
                 // Signal to the profiler that the frame is finished.
                 profiler.end_frame().unwrap();
@@ -228,8 +241,12 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 }
 
 fn main() {
+    tracy_client::Client::start();
     //env_logger::init_from_env(env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "warn"));
     let event_loop = EventLoop::new();
-    let window = winit::window::Window::new(&event_loop).unwrap();
+    let window = winit::window::WindowBuilder::new()
+        .with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)))
+        .build(&event_loop)
+        .unwrap();
     futures_lite::future::block_on(run(event_loop, window));
 }
