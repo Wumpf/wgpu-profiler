@@ -15,6 +15,7 @@ Simple profiler scopes for wgpu using timer queries
     * No stalling of the device at any time!
 * Many profiler instances can live side by side
 * chrome trace flamegraph json export
+* Tracy integration (behind `tracy` feature flag)
 
 TODO:
 * Better error messages
@@ -78,6 +79,8 @@ dual licensed as above, without any additional terms or conditions.
 
 ## Changelog
 
+* 0.14.0
+  * Tracy integration, by @cwfitzgerald in [#35](https://github.com/Wumpf/wgpu-profiler/pull/35)
 * 0.13.0
   * Upgrade to wgpu 0.17, by @waywardmonkeys in [#31](https://github.com/Wumpf/wgpu-profiler/pull/31)
 * 0.12.1
