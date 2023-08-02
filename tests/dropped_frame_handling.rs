@@ -19,7 +19,7 @@ async fn handle_dropped_frames_gracefully_async() {
         .unwrap();
 
     // max_num_pending_frames is one!
-    let mut profiler = wgpu_profiler::GpuProfiler::new(&adapter, &device, &queue, 4);
+    let mut profiler = wgpu_profiler::GpuProfiler::new(&adapter, &device, &queue, 1);
 
     // Two frames without device poll, causing the profiler to drop a frame on the second round.
     for _ in 0..2 {

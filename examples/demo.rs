@@ -38,7 +38,7 @@ fn console_output(results: &Option<Vec<GpuTimerScopeResult>>, enabled_features: 
 async fn run(event_loop: EventLoop<()>, window: Window) {
     let size = window.inner_size();
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::DX12,
+        backends: wgpu::Backends::all(),
         dx12_shader_compiler: wgpu::Dx12Compiler::default(),
     });
     let surface = unsafe { instance.create_surface(&window) }.expect("Failed to create surface.");
