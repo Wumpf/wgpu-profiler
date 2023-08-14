@@ -79,7 +79,7 @@ dual licensed as above, without any additional terms or conditions.
 
 ## Changelog
 
-* _pending, waiting for a [tracy release of this](https://github.com/nagisa/rust_tracy_client/pull/41)_ 0.14.0
+* 0.14.0
   * Tracy integration, by @cwfitzgerald in [#35](https://github.com/Wumpf/wgpu-profiler/pull/35)
 * 0.13.0
   * Upgrade to wgpu 0.17, by @waywardmonkeys in [#31](https://github.com/Wumpf/wgpu-profiler/pull/31)
