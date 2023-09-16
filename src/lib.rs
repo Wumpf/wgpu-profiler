@@ -216,7 +216,7 @@ impl GpuProfiler {
                 &self.active_frame.query_pools[open_scope.start_query.pool_idx as usize].query_set,
                 open_scope.start_query.query_idx + 1,
             );
-            
+
             #[cfg(feature = "tracy")]
             if let Some(ref mut tracy_scope) = open_scope.tracy_scope {
                 tracy_scope.end_zone();
