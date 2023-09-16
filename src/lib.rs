@@ -2,7 +2,7 @@
 
 Easy to use profiler scopes for [wgpu](https://github.com/gfx-rs/wgpu) using timer queries.
 
-wgpu_profiler manages all the necessary [`wgpu::QuerySet`] and [`wgpu::Buffer`] behind the scenes
+`wgpu_profiler` manages all the necessary [`wgpu::QuerySet`] and [`wgpu::Buffer`] behind the scenes
 and allows you to create to create timer scopes with minimal overhead!
 
 # How to use
@@ -116,10 +116,10 @@ pub struct GpuProfiler {
 
 // Public interface
 impl GpuProfiler {
-    /// Combination of all timer query features GpuProfiler can leverage.
+    /// Combination of all timer query features `GpuProfiler` can leverage.
     pub const ALL_WGPU_TIMER_FEATURES: wgpu::Features = wgpu::Features::TIMESTAMP_QUERY.union(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES);
 
-    /// Combination of all timer query features GpuProfiler can leverage.
+    /// Combination of all timer query features `GpuProfiler` can leverage.
     #[deprecated(since = "0.9.0", note = "Use ALL_WGPU_TIMER_FEATURES instead")]
     pub const REQUIRED_WGPU_FEATURES: wgpu::Features = GpuProfiler::ALL_WGPU_TIMER_FEATURES;
 
