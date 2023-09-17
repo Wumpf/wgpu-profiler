@@ -79,6 +79,9 @@ dual licensed as above, without any additional terms or conditions.
 
 ## Changelog
 
+* 0.14.2
+  * Fix pointing to wrong tracy version, by @waywardmonkeys in [#36](https://github.com/Wumpf/wgpu-profiler/pull/35)
+  * Doc fixes, by @waywardmonkeys in [#38](https://github.com/Wumpf/wgpu-profiler/pull/35)
 * 0.14.1
   * Tracy integration, by @cwfitzgerald in [#35](https://github.com/Wumpf/wgpu-profiler/pull/35)
 * 0.13.0
