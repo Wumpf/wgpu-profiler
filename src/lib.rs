@@ -116,10 +116,10 @@ pub struct GpuProfiler {
 
 // Public interface
 impl GpuProfiler {
-    /// Combination of all timer query features `GpuProfiler` can leverage.
+    /// Combination of all timer query features [`GpuProfiler`] can leverage.
     pub const ALL_WGPU_TIMER_FEATURES: wgpu::Features = wgpu::Features::TIMESTAMP_QUERY.union(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES);
 
-    /// Combination of all timer query features `GpuProfiler` can leverage.
+    /// Combination of all timer query features [`GpuProfiler`] can leverage.
     #[deprecated(since = "0.9.0", note = "Use ALL_WGPU_TIMER_FEATURES instead")]
     pub const REQUIRED_WGPU_FEATURES: wgpu::Features = GpuProfiler::ALL_WGPU_TIMER_FEATURES;
 
@@ -216,7 +216,7 @@ impl GpuProfiler {
                 &self.active_frame.query_pools[open_scope.start_query.pool_idx as usize].query_set,
                 open_scope.start_query.query_idx + 1,
             );
-            
+
             #[cfg(feature = "tracy")]
             if let Some(ref mut tracy_scope) = open_scope.tracy_scope {
                 tracy_scope.end_zone();
