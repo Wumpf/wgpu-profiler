@@ -4,24 +4,24 @@
 use crate::{GpuProfiler, ProfilerCommandRecorder};
 
 /// Scope that takes a (mutable) reference to the encoder/pass.
-/// Calls end_scope on drop.
+/// Calls [`GpuProfiler::end_scope()`] on drop.
 pub struct Scope<'a, W: ProfilerCommandRecorder> {
     profiler: &'a mut GpuProfiler,
     recorder: &'a mut W,
 }
 
 /// Scope that takes ownership of the encoder/pass.
-/// Calls end_scope on drop.
+/// Calls [`GpuProfiler::end_scope()`] on drop.
 pub struct OwningScope<'a, W: ProfilerCommandRecorder> {
     profiler: &'a mut GpuProfiler,
     recorder: W,
 }
 
 /// Scope that takes ownership of the encoder/pass.
-/// Does NOT call end_scope on drop.
+/// Does NOT call [`GpuProfiler::end_scope()`] on drop.
 /// This construct is just for completeness in cases where working with scopes is preferred but one can't rely on the Drop call in the right place.
 /// This is useful when the owned value needs to be recovered after the end of the scope.
-/// In particular, to submit a `CommandEncoder` to a queue ownership of the encoder is necessary.
+/// In particular, to submit a [`wgpu::CommandEncoder`] to a queue, ownership of the encoder is necessary.
 pub struct ManualOwningScope<'a, W: ProfilerCommandRecorder> {
     profiler: &'a mut GpuProfiler,
     recorder: W,
@@ -77,8 +77,8 @@ impl<'a, W: ProfilerCommandRecorder> ManualOwningScope<'a, W> {
         Scope::start(label, self.profiler, &mut self.recorder, device)
     }
 
-    /// Ends the scope allowing the extraction of owned the ProfilerCommandRecorder
-    /// and the mutable reference to the GpuProfiler.
+    /// Ends the scope allowing the extraction of the owned [`ProfilerCommandRecorder`]
+    /// and the mutable reference to the [`GpuProfiler`].
     #[must_use]
     #[track_caller]
     pub fn end_scope(mut self) -> (W, &'a mut GpuProfiler) {
@@ -87,7 +87,7 @@ impl<'a, W: ProfilerCommandRecorder> ManualOwningScope<'a, W> {
     }
 }
 impl<'a> Scope<'a, wgpu::CommandEncoder> {
-    /// Start a render pass wrapped in a OwningScope.
+    /// Start a render pass wrapped in a [`OwningScope`].
     #[track_caller]
     pub fn scoped_render_pass<'b>(
         &'b mut self,
@@ -99,7 +99,7 @@ impl<'a> Scope<'a, wgpu::CommandEncoder> {
         OwningScope::start(label, self.profiler, render_pass, device)
     }
 
-    /// Start a compute pass wrapped in a OwningScope.
+    /// Start a compute pass wrapped in a [`OwningScope`].
     #[track_caller]
     pub fn scoped_compute_pass(
         &mut self,
@@ -113,7 +113,7 @@ impl<'a> Scope<'a, wgpu::CommandEncoder> {
 }
 
 impl<'a> OwningScope<'a, wgpu::CommandEncoder> {
-    /// Start a render pass wrapped in an OwningScope.
+    /// Start a render pass wrapped in an [`OwningScope`].
     #[track_caller]
     pub fn scoped_render_pass<'b>(
         &'b mut self,
@@ -125,7 +125,7 @@ impl<'a> OwningScope<'a, wgpu::CommandEncoder> {
         OwningScope::start(label, self.profiler, render_pass, device)
     }
 
-    /// Start a compute pass wrapped in a OwningScope.
+    /// Start a compute pass wrapped in a [`OwningScope`].
     #[track_caller]
     pub fn scoped_compute_pass(
         &mut self,
@@ -139,7 +139,7 @@ impl<'a> OwningScope<'a, wgpu::CommandEncoder> {
 }
 
 impl<'a> ManualOwningScope<'a, wgpu::CommandEncoder> {
-    /// Start a render pass wrapped in an OwningScope.
+    /// Start a render pass wrapped in an [`OwningScope`].
     #[track_caller]
     pub fn scoped_render_pass<'b>(
         &'b mut self,
@@ -151,7 +151,7 @@ impl<'a> ManualOwningScope<'a, wgpu::CommandEncoder> {
         OwningScope::start(label, self.profiler, render_pass, device)
     }
 
-    /// Start a compute pass wrapped in an OwningScope.
+    /// Start a compute pass wrapped in an [`OwningScope`].
     #[track_caller]
     pub fn scoped_compute_pass(
         &mut self,
