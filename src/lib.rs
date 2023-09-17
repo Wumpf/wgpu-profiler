@@ -28,7 +28,7 @@ use wgpu_profiler::*;
 # let (instance, adapter, device, queue) = futures_lite::future::block_on(wgpu_init());
 // ...
 
-let mut profiler = GpuProfiler::new(4, queue.get_timestamp_period(), device.features());
+let mut profiler = GpuProfiler::new(&adapter, &device, &queue, 4);
 
 // ...
 
