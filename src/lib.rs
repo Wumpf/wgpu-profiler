@@ -131,6 +131,7 @@ impl GpuProfiler {
     /// A profiler-frame is in-flight until its queries have been successfully resolved using [`GpuProfiler::process_finished_frame`].
     /// If this threshold is reached, [`GpuProfiler::end_frame`] will drop frames.
     /// (Typical values for `max_num_pending_frames` are 2~4)
+    #[must_use]
     pub fn new(_adapter: &wgpu::Adapter, device: &wgpu::Device, queue: &wgpu::Queue, max_num_pending_frames: usize) -> Self {
         assert!(max_num_pending_frames > 0);
         let active_features = device.features();
