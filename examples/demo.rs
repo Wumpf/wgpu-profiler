@@ -11,7 +11,9 @@ fn scopes_to_console_recursive(results: &[GpuTimerScopeResult], indentation: u32
         if indentation > 0 {
             print!("{:<width$}", "|", width = 4);
         }
-        println!("{:.3}μs - {}", (scope.time.end - scope.time.start) * 1000.0 * 1000.0, scope.label);
+        if let Some(time) = &scope.time {
+            println!("{:.3}μs - {}", (time.end - time.start) * 1000.0 * 1000.0, scope.label);
+        }
         if !scope.nested_scopes.is_empty() {
             scopes_to_console_recursive(&scope.nested_scopes, indentation + 1);
         }
