@@ -27,7 +27,7 @@ Create a new profiler object:
 ```rust
 use wgpu_profiler::{wgpu_profiler, GpuProfiler};
 // ...
-let mut profiler = GpuProfiler::new(4, queue.get_timestamp_period(), device.features()); // buffer up to 4 frames
+let mut profiler = GpuProfiler::new(&adapter, &device, &queue, 4); // buffer up to 4 frames
 ```
 
 Using scopes is easiest with the macro:
