@@ -32,7 +32,7 @@ pub(crate) fn create_tracy_gpu_client(
     encoder.copy_buffer_to_buffer(&resolve_buffer, 0, &map_buffer, 0, crate::QUERY_SIZE as _);
     queue.submit(Some(encoder.finish()));
 
-    let _ = map_buffer.slice(..).map_async(wgpu::MapMode::Read, |_| ());
+    map_buffer.slice(..).map_async(wgpu::MapMode::Read, |_| ());
     device.poll(wgpu::Maintain::Wait);
 
     let view = map_buffer.slice(..).get_mapped_range();
