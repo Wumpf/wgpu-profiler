@@ -15,13 +15,12 @@ tracy = ["tracy-client", "profiling/profile-with-tracy"]
 [lib]
 
 [dependencies]
+thiserror = "1"
 tracy-client = { version = "0.16", optional = true }
 wgpu = "0.17"
-thiserror = "1"
 
 [dev-dependencies]
+futures-lite = "1"
 profiling = { version = "1" }
 tracy-client = "0.16.1"
 winit = "0.28"
-futures-lite = "1"
-#env_logger = "0.8.2"
