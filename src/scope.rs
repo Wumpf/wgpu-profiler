@@ -79,13 +79,13 @@ impl<'a, W: ProfilerCommandRecorder> ManualOwningScope<'a, W> {
 
     /// Ends the scope allowing the extraction of the owned [`ProfilerCommandRecorder`]
     /// and the mutable reference to the [`GpuProfiler`].
-    #[must_use]
     #[track_caller]
-    pub fn end_scope(mut self) -> (W, &'a mut GpuProfiler) {
-        self.profiler.end_scope(&mut self.recorder);
-        (self.recorder, self.profiler)
+    pub fn end_scope(mut self) -> Result<(W, &'a mut GpuProfiler), crate::GpuProfilerError> {
+        self.profiler.end_scope(&mut self.recorder)?;
+        Ok((self.recorder, self.profiler))
     }
 }
+
 impl<'a> Scope<'a, wgpu::CommandEncoder> {
     /// Start a render pass wrapped in a [`OwningScope`].
     #[track_caller]
@@ -181,7 +181,8 @@ impl<'a, W: ProfilerCommandRecorder> std::ops::DerefMut for Scope<'a, W> {
 
 impl<'a, W: ProfilerCommandRecorder> Drop for Scope<'a, W> {
     fn drop(&mut self) {
-        self.profiler.end_scope(self.recorder);
+        // Creation implies begin_scope, so this can't fail.
+        self.profiler.end_scope(self.recorder).unwrap();
     }
 }
 
@@ -202,7 +203,8 @@ impl<'a, W: ProfilerCommandRecorder> std::ops::DerefMut for OwningScope<'a, W> {
 
 impl<'a, W: ProfilerCommandRecorder> Drop for OwningScope<'a, W> {
     fn drop(&mut self) {
-        self.profiler.end_scope(&mut self.recorder);
+        // Creation implies begin_scope, so this can't fail.
+        self.profiler.end_scope(&mut self.recorder).unwrap();
     }
 }
 

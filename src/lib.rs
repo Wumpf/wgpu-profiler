@@ -114,6 +114,9 @@ Call `GpuProfiler::resolve_queries` after all profiling scopes have been closed 
 There were still {0} queries unresolved"
     )]
     UnresolvedQueriesAtFrameEnd(u32),
+
+    #[error("No profiler GpuProfiler scope was previously opened. For each call to `end_scope` you first need to call `begin_scope`.")]
+    NoOpenScope,
 }
 
 pub struct GpuProfiler {
@@ -231,12 +234,12 @@ impl GpuProfiler {
 
     /// Ends a debug/timer scope.
     ///
-    /// Panics if no scope has been open previously.
+    /// Returns an error if no scope has been opened previously.
     ///
     /// See also [`wgpu_profiler!`], [`GpuProfiler::begin_scope`]
-    pub fn end_scope<Recorder: ProfilerCommandRecorder>(&mut self, encoder_or_pass: &mut Recorder) {
+    pub fn end_scope<Recorder: ProfilerCommandRecorder>(&mut self, encoder_or_pass: &mut Recorder) -> Result<(), GpuProfilerError> {
         // Scopes are opened even if no query is performed.
-        let mut open_scope = self.open_scopes.pop().expect("No profiler GpuProfiler scope was previously opened");
+        let mut open_scope = self.open_scopes.pop().ok_or(GpuProfilerError::NoOpenScope)?;
 
         if let Some(start_query) = &open_scope.start_query {
             debug_assert!(
@@ -271,6 +274,8 @@ impl GpuProfiler {
         if self.enable_debug_marker {
             encoder_or_pass.pop_debug_group();
         }
+
+        Ok(())
     }
 
     /// Puts query resolve commands in the encoder for all unresolved, pending queries of the current profiler frame.

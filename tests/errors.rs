@@ -42,7 +42,7 @@ fn end_frame_unclosed_scope() {
     // Make sure we can recover from this.
     {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-        profiler.end_scope(&mut encoder);
+        profiler.end_scope(&mut encoder).unwrap();
         profiler.resolve_queries(&mut encoder);
     }
     assert_eq!(profiler.end_frame(), Ok(()));
@@ -57,7 +57,7 @@ fn end_frame_unresolved_scope() {
     {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
         profiler.begin_scope("open scope", &mut encoder, &device);
-        profiler.end_scope(&mut encoder);
+        profiler.end_scope(&mut encoder).unwrap();
     }
 
     assert_eq!(profiler.end_frame(), Err(wgpu_profiler::GpuProfilerError::UnresolvedQueriesAtFrameEnd(2)));
@@ -65,6 +65,26 @@ fn end_frame_unresolved_scope() {
     // Make sure we can recover from this!
     {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        profiler.resolve_queries(&mut encoder);
+    }
+    assert_eq!(profiler.end_frame(), Ok(()));
+}
+
+#[test]
+fn no_open_scope() {
+    // Doesn't require the TIMESTAMP_QUERY feature.
+    let (adapter, device, queue) = create_device(false);
+
+    let mut profiler = wgpu_profiler::GpuProfiler::new(&adapter, &device, &queue, 1);
+    {
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        assert_eq!(profiler.end_scope(&mut encoder), Err(wgpu_profiler::GpuProfilerError::NoOpenScope));
+    }
+    // Make sure we can recover from this.
+    {
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        profiler.begin_scope("open scope", &mut encoder, &device);
+        assert_eq!(profiler.end_scope(&mut encoder), Ok(()));
         profiler.resolve_queries(&mut encoder);
     }
     assert_eq!(profiler.end_frame(), Ok(()));
