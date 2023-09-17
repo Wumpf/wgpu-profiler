@@ -479,15 +479,16 @@ impl GpuProfiler {
                             .try_into()
                             .unwrap(),
                     );
+
+                    #[cfg(feature = "tracy")]
+                    if let Some(tracy_scope) = scope.tracy_scope {
+                        tracy_scope.upload_timestamp(start_raw as i64, end_raw as i64);
+                    }
+
                     Some((start_raw as f64 * timestamp_to_sec)..(end_raw as f64 * timestamp_to_sec))
                 } else {
                     None
                 };
-
-                #[cfg(feature = "tracy")]
-                if let Some(tracy_scope) = scope.tracy_scope {
-                    tracy_scope.upload_timestamp(start_raw as i64, end_raw as i64);
-                }
 
                 GpuTimerScopeResult {
                     label: scope.label,
