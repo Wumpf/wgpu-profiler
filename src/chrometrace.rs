@@ -22,7 +22,7 @@ pub fn write_chrometrace(target: &Path, profile_data: &[GpuTimerScopeResult]) ->
 
 fn write_results_recursive(file: &mut File, result: &GpuTimerScopeResult, last: bool) -> std::io::Result<()> {
     // Ignore "unprofiled" scopes for now.
-    // TODO: It would be nice if they'd still show up in the flam graph if they have subscopes!
+    // TODO: It would be nice if they'd still show up in the flame graph if they have subscopes!
     if let Some(time) = &result.time {
         // note: ThreadIds are under the control of Rust’s standard library
         // and there may not be any relationship between ThreadId and the underlying platform’s notion of a thread identifier
