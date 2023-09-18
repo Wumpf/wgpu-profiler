@@ -102,19 +102,23 @@ pub struct GpuTimerScopeResult {
     pub tid: ThreadId,
 }
 
-/// A wgpu-profiler error.
+/// Errors that can occur during [`GpuProfiler::end_frame`].
 #[derive(thiserror::Error, Debug, PartialEq, Eq)]
-pub enum GpuProfilerError {
+pub enum EndFrameError {
     #[error("All profiling scopes need to be closed before ending a frame. The following scopes were still open: {0:?}")]
-    UnclosedScopesAtFrameEnd(Vec<String>),
+    UnclosedScopes(Vec<String>),
 
     #[error(
         "Not all queries were resolved before ending a frame.\n
 Call `GpuProfiler::resolve_queries` after all profiling scopes have been closed and before ending the frame.\n
 There were still {0} queries unresolved"
     )]
-    UnresolvedQueriesAtFrameEnd(u32),
+    UnresolvedQueries(u32),
+}
 
+/// Errors that can occur during [`GpuProfiler::end_scope`].
+#[derive(thiserror::Error, Debug, PartialEq, Eq)]
+pub enum ScopeError {
     #[error("No profiler GpuProfiler scope was previously opened. For each call to `end_scope` you first need to call `begin_scope`.")]
     NoOpenScope,
 }
@@ -237,9 +241,9 @@ impl GpuProfiler {
     /// Returns an error if no scope has been opened previously.
     ///
     /// See also [`wgpu_profiler!`], [`GpuProfiler::begin_scope`]
-    pub fn end_scope<Recorder: ProfilerCommandRecorder>(&mut self, encoder_or_pass: &mut Recorder) -> Result<(), GpuProfilerError> {
+    pub fn end_scope<Recorder: ProfilerCommandRecorder>(&mut self, encoder_or_pass: &mut Recorder) -> Result<(), ScopeError> {
         // Scopes are opened even if no query is performed.
-        let mut open_scope = self.open_scopes.pop().ok_or(GpuProfilerError::NoOpenScope)?;
+        let mut open_scope = self.open_scopes.pop().ok_or(ScopeError::NoOpenScope)?;
 
         if let Some(start_query) = &open_scope.start_query {
             debug_assert!(
@@ -312,9 +316,9 @@ impl GpuProfiler {
     /// Fails if there are still open scopes or unresolved queries.
     /// Warning: This validation happens only, if the profiler enabled.
     #[allow(clippy::result_unit_err)]
-    pub fn end_frame(&mut self) -> Result<(), GpuProfilerError> {
+    pub fn end_frame(&mut self) -> Result<(), EndFrameError> {
         if !self.open_scopes.is_empty() {
-            return Err(GpuProfilerError::UnclosedScopesAtFrameEnd(
+            return Err(EndFrameError::UnclosedScopes(
                 self.open_scopes.iter().map(|open_scope| open_scope.label.clone()).collect(),
             ));
         }
@@ -326,7 +330,7 @@ impl GpuProfiler {
             .map(|pool| pool.num_used_queries - pool.num_resolved_queries)
             .sum();
         if num_unresolved_queries != 0 {
-            return Err(GpuProfilerError::UnresolvedQueriesAtFrameEnd(num_unresolved_queries));
+            return Err(EndFrameError::UnresolvedQueries(num_unresolved_queries));
         }
 
         self.size_for_new_query_pools = self
