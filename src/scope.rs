@@ -80,9 +80,10 @@ impl<'a, W: ProfilerCommandRecorder> ManualOwningScope<'a, W> {
     /// Ends the scope allowing the extraction of the owned [`ProfilerCommandRecorder`]
     /// and the mutable reference to the [`GpuProfiler`].
     #[track_caller]
-    pub fn end_scope(mut self) -> Result<(W, &'a mut GpuProfiler), crate::GpuProfilerError> {
-        self.profiler.end_scope(&mut self.recorder)?;
-        Ok((self.recorder, self.profiler))
+    pub fn end_scope(mut self) -> (W, &'a mut GpuProfiler) {
+        // Can't fail since creation implies begin_scope.
+        self.profiler.end_scope(&mut self.recorder).unwrap();
+        (self.recorder, self.profiler)
     }
 }
 
