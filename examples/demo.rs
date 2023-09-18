@@ -183,7 +183,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     {
                         profiler.begin_scope("fractal 2", &mut rpass, &device);
                         rpass.draw(0..6, 2..3);
-                        profiler.end_scope(&mut rpass);
+                        profiler.end_scope(&mut rpass).unwrap();
                     }
                     // ... or a scope object that takes ownership of the pass
                     {
