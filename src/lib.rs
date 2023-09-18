@@ -91,7 +91,7 @@ pub struct GpuTimerScopeResult {
     /// Time range of this scope in seconds.
     ///
     /// None if the scope was not profiled.
-    /// This if profiling for the kind of scope was disabled.
+    /// This can happen if profiling for the respective context (pass or encoder) was disabled.
     ///
     /// Meaning of absolute value is not defined.
     pub time: Option<Range<f64>>,
