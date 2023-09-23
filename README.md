@@ -77,7 +77,9 @@ for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
 
 ## Changelog
-
+* unreleased
+  * sample & doc fixes, by @waywardmonkeys in [#41](https://github.com/Wumpf/wgpu-profiler/pull/41), [#44](https://github.com/Wumpf/wgpu-profiler/pull/44)
+  * `end_scope` & `end_frame` return `thiserror` errors instead of internal unwrap/except on user errors, by @Wumpf in [#45](https://github.com/Wumpf/wgpu-profiler/pull/45)
 * 0.14.2
   * Fix pointing to wrong tracy version, by @waywardmonkeys in [#36](https://github.com/Wumpf/wgpu-profiler/pull/35)
   * Doc fixes, by @waywardmonkeys in [#38](https://github.com/Wumpf/wgpu-profiler/pull/35)
