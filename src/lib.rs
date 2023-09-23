@@ -83,15 +83,41 @@ pub mod scope;
 #[cfg(feature = "tracy")]
 pub mod tracy;
 
+/// The result of a gpu timer scope.
 pub struct GpuTimerScopeResult {
+    /// Label that was specified when opening the scope.
     pub label: String,
+
     /// Time range of this scope in seconds.
+    ///
     /// Meaning of absolute value is not defined.
     pub time: Range<f64>,
 
+    /// Scopes that were opened while this scope was open.
     pub nested_scopes: Vec<GpuTimerScopeResult>,
     pub pid: u32,
     pub tid: ThreadId,
+}
+
+/// Errors that can occur during [`GpuProfiler::end_frame`].
+#[derive(thiserror::Error, Debug, PartialEq, Eq)]
+pub enum EndFrameError {
+    #[error("All profiling scopes need to be closed before ending a frame. The following scopes were still open: {0:?}")]
+    UnclosedScopes(Vec<String>),
+
+    #[error(
+        "Not all queries were resolved before ending a frame.\n
+Call `GpuProfiler::resolve_queries` after all profiling scopes have been closed and before ending the frame.\n
+There were still {0} queries unresolved"
+    )]
+    UnresolvedQueries(u32),
+}
+
+/// Errors that can occur during [`GpuProfiler::end_scope`].
+#[derive(thiserror::Error, Debug, PartialEq, Eq)]
+pub enum ScopeError {
+    #[error("No profiler GpuProfiler scope was previously opened. For each call to `end_scope` you first need to call `begin_scope`.")]
+    NoOpenScope,
 }
 
 pub struct GpuProfiler {
@@ -161,16 +187,23 @@ impl GpuProfiler {
         }
     }
 
+    /// Returns true if a timestamp should be written to the encoder or pass.
+    fn timestamp_write_enabled<Recorder: ProfilerCommandRecorder>(&self, encoder_or_pass: &mut Recorder) -> bool {
+        (encoder_or_pass.is_pass() && self.enable_pass_timer) || (!encoder_or_pass.is_pass() && self.enable_encoder_timer)
+    }
+
     /// Starts a new debug/timer scope on a given encoder or rendering/compute pass.
     ///
     /// Scopes can be arbitrarily nested.
     ///
-    /// May create new wgpu query objects (which is why it needs a [`wgpu::Device`] reference)
+    /// May create new wgpu query objects (which is why it needs a [`wgpu::Device`] reference).
+    ///
+    /// If encoder/pass timer queries are disabled respectively, no scope will be opened.
     ///
     /// See also [`wgpu_profiler!`], [`GpuProfiler::end_scope`]
     #[track_caller]
     pub fn begin_scope<Recorder: ProfilerCommandRecorder>(&mut self, label: &str, encoder_or_pass: &mut Recorder, device: &wgpu::Device) {
-        if (encoder_or_pass.is_pass() && self.enable_pass_timer) || (!encoder_or_pass.is_pass() && self.enable_encoder_timer) {
+        if self.timestamp_write_enabled(encoder_or_pass) {
             let start_query = self.allocate_query_pair(device);
 
             encoder_or_pass.write_timestamp(
@@ -180,7 +213,6 @@ impl GpuProfiler {
 
             let pid = std::process::id();
             let tid = std::thread::current().id();
-
             let _location = std::panic::Location::caller();
 
             self.open_scopes.push(UnprocessedTimerScope {
@@ -193,6 +225,7 @@ impl GpuProfiler {
                 tracy_scope: self.tracy_context.span_alloc(label, "", _location.file(), _location.line()).ok(),
             });
         }
+
         if self.enable_debug_marker {
             encoder_or_pass.push_debug_group(label);
         }
@@ -200,12 +233,25 @@ impl GpuProfiler {
 
     /// Ends a debug/timer scope.
     ///
-    /// Panics if no scope has been open previously.
+    /// If encoder/pass timer queries are disabled respectively, will not attempt to end a scope.
+    /// Returns an error if no scope has been opened previously.
     ///
     /// See also [`wgpu_profiler!`], [`GpuProfiler::begin_scope`]
-    pub fn end_scope<Recorder: ProfilerCommandRecorder>(&mut self, encoder_or_pass: &mut Recorder) {
-        if (encoder_or_pass.is_pass() && self.enable_pass_timer) || (!encoder_or_pass.is_pass() && self.enable_encoder_timer) {
-            let mut open_scope = self.open_scopes.pop().expect("No profiler GpuProfiler scope was previously opened");
+    pub fn end_scope<Recorder: ProfilerCommandRecorder>(&mut self, encoder_or_pass: &mut Recorder) -> Result<(), ScopeError> {
+        if self.timestamp_write_enabled(encoder_or_pass) {
+            let mut open_scope = self.open_scopes.pop().ok_or(ScopeError::NoOpenScope)?;
+
+            debug_assert!(
+                (encoder_or_pass.is_pass() && self.enable_pass_timer) || (!encoder_or_pass.is_pass() && self.enable_encoder_timer),
+                "Scope was opened with a query, but queries are disabled.\n
+                `encoder_or_pass.is_pass()`: {}\n
+                self.enable_pass_timer: {}\n
+                self.enable_encoder_timer: {}",
+                encoder_or_pass.is_pass(),
+                self.enable_pass_timer,
+                self.enable_encoder_timer
+            );
+
             encoder_or_pass.write_timestamp(
                 &self.active_frame.query_pools[open_scope.start_query.pool_idx as usize].query_set,
                 open_scope.start_query.query_idx + 1,
@@ -227,6 +273,8 @@ impl GpuProfiler {
         if self.enable_debug_marker {
             encoder_or_pass.pop_debug_group();
         }
+
+        Ok(())
     }
 
     /// Puts query resolve commands in the encoder for all unresolved, pending queries of the current profiler frame.
@@ -257,20 +305,27 @@ impl GpuProfiler {
     }
 
     /// Marks the end of a frame.
+    ///
     /// Needs to be called **after** submitting any encoder used in the current frame.
+    ///
+    /// Fails if there are still open scopes or unresolved queries.
+    /// Warning: This validation happens only, if the profiler enabled.
     #[allow(clippy::result_unit_err)]
-    pub fn end_frame(&mut self) -> Result<(), ()> {
-        // TODO: Error messages
+    pub fn end_frame(&mut self) -> Result<(), EndFrameError> {
         if !self.open_scopes.is_empty() {
-            return Err(());
+            return Err(EndFrameError::UnclosedScopes(
+                self.open_scopes.iter().map(|open_scope| open_scope.label.clone()).collect(),
+            ));
         }
-        if self
+
+        let num_unresolved_queries = self
             .active_frame
             .query_pools
             .iter()
-            .any(|pool| pool.num_resolved_queries != pool.num_used_queries)
-        {
-            return Err(());
+            .map(|pool| pool.num_used_queries - pool.num_resolved_queries)
+            .sum();
+        if num_unresolved_queries != 0 {
+            return Err(EndFrameError::UnresolvedQueries(num_unresolved_queries));
         }
 
         self.size_for_new_query_pools = self
@@ -283,11 +338,11 @@ impl GpuProfiler {
             // Drop previous (!) frame.
             // Dropping the oldest frame could get us into an endless cycle where we're never able to complete
             // any pending frames as the ones closest to completion would be evicted.
-            let dropped_frame = self.pending_frames.pop().unwrap();
-
-            // Mark the frame as dropped. We'll give back the query pools once the mapping is done.
-            // Any previously issued map_async call that haven't finished yet, will invoke their callback with mapping abort.
-            self.reset_and_cache_unused_query_pools(dropped_frame.query_pools);
+            if let Some(dropped_frame) = self.pending_frames.pop() {
+                // Mark the frame as dropped. We'll give back the query pools once the mapping is done.
+                // Any previously issued map_async call that haven't finished yet, will invoke their callback with mapping abort.
+                self.reset_and_cache_unused_query_pools(dropped_frame.query_pools);
+            }
         }
 
         // Map all buffers.
@@ -416,9 +471,11 @@ impl GpuProfiler {
                     Self::process_timings_recursive(timestamp_to_sec, resolved_query_buffers, scope.nested_scopes)
                 };
 
-                // By design timestamps for start/end are consecutive.
+                // Read timestamp from buffer.
                 let buffer = &resolved_query_buffers[scope.start_query.pool_idx as usize];
                 let offset = (scope.start_query.query_idx * QUERY_SIZE) as usize;
+
+                // By design timestamps for start/end are consecutive.
                 let start_raw = u64::from_le_bytes(buffer[offset..(offset + std::mem::size_of::<u64>())].try_into().unwrap());
                 let end_raw = u64::from_le_bytes(
                     buffer[(offset + std::mem::size_of::<u64>())..(offset + std::mem::size_of::<u64>() * 2)]
