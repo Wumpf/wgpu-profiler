@@ -90,11 +90,8 @@ pub struct GpuTimerScopeResult {
 
     /// Time range of this scope in seconds.
     ///
-    /// None if the scope was not profiled.
-    /// This can happen if profiling for the respective context (pass or encoder) was disabled.
-    ///
     /// Meaning of absolute value is not defined.
-    pub time: Option<Range<f64>>,
+    pub time: Range<f64>,
 
     /// Scopes that were opened while this scope was open.
     pub nested_scopes: Vec<GpuTimerScopeResult>,
@@ -190,21 +187,23 @@ impl GpuProfiler {
         }
     }
 
+    /// Returns true if a timestamp should be written to the encoder or pass.
+    fn timestamp_write_enabled<Recorder: ProfilerCommandRecorder>(&self, encoder_or_pass: &mut Recorder) -> bool {
+        (encoder_or_pass.is_pass() && self.enable_pass_timer) || (!encoder_or_pass.is_pass() && self.enable_encoder_timer)
+    }
+
     /// Starts a new debug/timer scope on a given encoder or rendering/compute pass.
     ///
     /// Scopes can be arbitrarily nested.
     ///
     /// May create new wgpu query objects (which is why it needs a [`wgpu::Device`] reference).
     ///
-    /// If encoder/pass timer queries are disabled respectively, a scope will still be opened,
-    /// but the resulting [`GpuTimerScopeResult`] will have `None` for its `time` field.
+    /// If encoder/pass timer queries are disabled respectively, no scope will be opened.
     ///
     /// See also [`wgpu_profiler!`], [`GpuProfiler::end_scope`]
     #[track_caller]
     pub fn begin_scope<Recorder: ProfilerCommandRecorder>(&mut self, label: &str, encoder_or_pass: &mut Recorder, device: &wgpu::Device) {
-        // Open a scope even if we don't perform a query, this makes error handling a bit more consistent and
-        // preserves scope hierarchy even if certain kinds of scopes are disabled.
-        let start_query = if (encoder_or_pass.is_pass() && self.enable_pass_timer) || (!encoder_or_pass.is_pass() && self.enable_encoder_timer) {
+        if self.timestamp_write_enabled(encoder_or_pass) {
             let start_query = self.allocate_query_pair(device);
 
             encoder_or_pass.write_timestamp(
@@ -212,24 +211,20 @@ impl GpuProfiler {
                 start_query.query_idx,
             );
 
-            Some(start_query)
-        } else {
-            None
-        };
+            let pid = std::process::id();
+            let tid = std::thread::current().id();
+            let _location = std::panic::Location::caller();
 
-        let pid = std::process::id();
-        let tid = std::thread::current().id();
-        let _location = std::panic::Location::caller();
-
-        self.open_scopes.push(UnprocessedTimerScope {
-            label: String::from(label),
-            start_query,
-            nested_scopes: Vec::new(),
-            pid,
-            tid,
-            #[cfg(feature = "tracy")]
-            tracy_scope: self.tracy_context.span_alloc(label, "", _location.file(), _location.line()).ok(),
-        });
+            self.open_scopes.push(UnprocessedTimerScope {
+                label: String::from(label),
+                start_query,
+                nested_scopes: Vec::new(),
+                pid,
+                tid,
+                #[cfg(feature = "tracy")]
+                tracy_scope: self.tracy_context.span_alloc(label, "", _location.file(), _location.line()).ok(),
+            });
+        }
 
         if self.enable_debug_marker {
             encoder_or_pass.push_debug_group(label);
@@ -238,14 +233,14 @@ impl GpuProfiler {
 
     /// Ends a debug/timer scope.
     ///
+    /// If encoder/pass timer queries are disabled respectively, will not attempt to end a scope.
     /// Returns an error if no scope has been opened previously.
     ///
     /// See also [`wgpu_profiler!`], [`GpuProfiler::begin_scope`]
     pub fn end_scope<Recorder: ProfilerCommandRecorder>(&mut self, encoder_or_pass: &mut Recorder) -> Result<(), ScopeError> {
-        // Scopes are opened even if no query is performed.
-        let mut open_scope = self.open_scopes.pop().ok_or(ScopeError::NoOpenScope)?;
+        if self.timestamp_write_enabled(encoder_or_pass) {
+            let mut open_scope = self.open_scopes.pop().ok_or(ScopeError::NoOpenScope)?;
 
-        if let Some(start_query) = &open_scope.start_query {
             debug_assert!(
                 (encoder_or_pass.is_pass() && self.enable_pass_timer) || (!encoder_or_pass.is_pass() && self.enable_encoder_timer),
                 "Scope was opened with a query, but queries are disabled.\n
@@ -258,8 +253,8 @@ impl GpuProfiler {
             );
 
             encoder_or_pass.write_timestamp(
-                &self.active_frame.query_pools[start_query.pool_idx as usize].query_set,
-                start_query.query_idx + 1,
+                &self.active_frame.query_pools[open_scope.start_query.pool_idx as usize].query_set,
+                open_scope.start_query.query_idx + 1,
             );
 
             #[cfg(feature = "tracy")]
@@ -476,32 +471,26 @@ impl GpuProfiler {
                     Self::process_timings_recursive(timestamp_to_sec, resolved_query_buffers, scope.nested_scopes)
                 };
 
-                // Read timestampe from buffer if any.
-                let time = if let Some(start_query) = scope.start_query {
-                    let buffer = &resolved_query_buffers[start_query.pool_idx as usize];
-                    let offset = (start_query.query_idx * QUERY_SIZE) as usize;
+                // Read timestamp from buffer.
+                let buffer = &resolved_query_buffers[scope.start_query.pool_idx as usize];
+                let offset = (scope.start_query.query_idx * QUERY_SIZE) as usize;
 
-                    // By design timestamps for start/end are consecutive.
-                    let start_raw = u64::from_le_bytes(buffer[offset..(offset + std::mem::size_of::<u64>())].try_into().unwrap());
-                    let end_raw = u64::from_le_bytes(
-                        buffer[(offset + std::mem::size_of::<u64>())..(offset + std::mem::size_of::<u64>() * 2)]
-                            .try_into()
-                            .unwrap(),
-                    );
+                // By design timestamps for start/end are consecutive.
+                let start_raw = u64::from_le_bytes(buffer[offset..(offset + std::mem::size_of::<u64>())].try_into().unwrap());
+                let end_raw = u64::from_le_bytes(
+                    buffer[(offset + std::mem::size_of::<u64>())..(offset + std::mem::size_of::<u64>() * 2)]
+                        .try_into()
+                        .unwrap(),
+                );
 
-                    #[cfg(feature = "tracy")]
-                    if let Some(tracy_scope) = scope.tracy_scope {
-                        tracy_scope.upload_timestamp(start_raw as i64, end_raw as i64);
-                    }
-
-                    Some((start_raw as f64 * timestamp_to_sec)..(end_raw as f64 * timestamp_to_sec))
-                } else {
-                    None
-                };
+                #[cfg(feature = "tracy")]
+                if let Some(tracy_scope) = scope.tracy_scope {
+                    tracy_scope.upload_timestamp(start_raw as i64, end_raw as i64);
+                }
 
                 GpuTimerScopeResult {
                     label: scope.label,
-                    time,
+                    time: (start_raw as f64 * timestamp_to_sec)..(end_raw as f64 * timestamp_to_sec),
                     nested_scopes,
                     pid: scope.pid,
                     tid: scope.tid,
@@ -519,7 +508,7 @@ struct QueryPoolQueryAddress {
 
 struct UnprocessedTimerScope {
     label: String,
-    start_query: Option<QueryPoolQueryAddress>,
+    start_query: QueryPoolQueryAddress,
     nested_scopes: Vec<UnprocessedTimerScope>,
     pub pid: u32,
     pub tid: ThreadId,

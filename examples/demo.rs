@@ -11,9 +11,9 @@ fn scopes_to_console_recursive(results: &[GpuTimerScopeResult], indentation: u32
         if indentation > 0 {
             print!("{:<width$}", "|", width = 4);
         }
-        if let Some(time) = &scope.time {
-            println!("{:.3}μs - {}", (time.end - time.start) * 1000.0 * 1000.0, scope.label);
-        }
+
+        println!("{:.3}μs - {}", (&scope.time.end - &scope.time.start) * 1000.0 * 1000.0, scope.label);
+
         if !scope.nested_scopes.is_empty() {
             scopes_to_console_recursive(&scope.nested_scopes, indentation + 1);
         }
@@ -246,9 +246,6 @@ fn main() {
     tracy_client::Client::start();
     //env_logger::init_from_env(env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "warn"));
     let event_loop = EventLoop::new();
-    let window = winit::window::WindowBuilder::new()
-        .with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)))
-        .build(&event_loop)
-        .unwrap();
+    let window = winit::window::WindowBuilder::new().build(&event_loop).unwrap();
     futures_lite::future::block_on(run(event_loop, window));
 }
