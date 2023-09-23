@@ -114,7 +114,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     surface.configure(&device, &sc_desc);
 
     // Create a new profiler instance
-    let mut profiler = GpuProfiler::new(&adapter, &device, &queue, 4);
+    let mut profiler = GpuProfiler::new(&adapter, &device, &queue, GpuProfilerSettings::default()).expect("Failed to create profiler");
     let mut latest_profiler_results = None;
 
     event_loop.run(move |event, _, control_flow| {

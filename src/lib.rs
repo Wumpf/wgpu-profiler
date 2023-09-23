@@ -28,7 +28,7 @@ use wgpu_profiler::*;
 # let (instance, adapter, device, queue) = futures_lite::future::block_on(wgpu_init());
 // ...
 
-let mut profiler = GpuProfiler::new(&adapter, &device, &queue, 4);
+let mut profiler = GpuProfiler::new(&adapter, &device, &queue, GpuProfilerSettings::default()).unwrap();
 
 // ...
 
@@ -78,10 +78,13 @@ On [`GpuProfiler::end_frame`], we memorize the total size of all `QueryPool`s in
 use std::{convert::TryInto, ops::Range, thread::ThreadId};
 
 pub mod chrometrace;
+mod errors;
 pub mod macros;
 pub mod scope;
 #[cfg(feature = "tracy")]
 pub mod tracy;
+
+pub use errors::{CreationError, EndFrameError, ScopeError};
 
 /// The result of a gpu timer scope.
 pub struct GpuTimerScopeResult {
@@ -99,27 +102,37 @@ pub struct GpuTimerScopeResult {
     pub tid: ThreadId,
 }
 
-/// Errors that can occur during [`GpuProfiler::end_frame`].
-#[derive(thiserror::Error, Debug, PartialEq, Eq)]
-pub enum EndFrameError {
-    #[error("All profiling scopes need to be closed before ending a frame. The following scopes were still open: {0:?}")]
-    UnclosedScopes(Vec<String>),
-
-    #[error(
-        "Not all queries were resolved before ending a frame.\n
-Call `GpuProfiler::resolve_queries` after all profiling scopes have been closed and before ending the frame.\n
-There were still {0} queries unresolved"
-    )]
-    UnresolvedQueries(u32),
+/// Settings passed on initialization of [`GpuProfiler`].
+#[derive(Debug, Clone)]
+pub struct GpuProfilerSettings {
+    /// A profiler queues up to `max_num_pending_frames` "profiler-frames" at a time.
+    ///
+    /// A profiler-frame is regarded as in-flight until its queries have been successfully
+    /// resolved using [`GpuProfiler::process_finished_frame`].
+    /// How long this takes to happen, depends on how fast buffer mappings return successfully
+    /// which in turn primarily depends on how fast the device is able to finish work queued to the [`wgpu::Queue`].
+    ///
+    /// If this threshold is exceeded, [`GpuProfiler::end_frame`] will silently drop frames.
+    /// *Newer* frames will be dropped first in order to get results back eventually.
+    /// (If the profiler were to drop the oldest frame, one may end up in a situation where there is never
+    /// frame that is fully processed and thus never any results to be retrieved).
+    ///
+    /// Good values for `max_num_pending_frames` are 2-4 but may depend on your application workload
+    /// and GPU-CPU syncing strategy.
+    /// Must be greater than 0.
+    pub max_num_pending_frames: usize,
 }
 
-/// Errors that can occur during [`GpuProfiler::end_scope`].
-#[derive(thiserror::Error, Debug, PartialEq, Eq)]
-pub enum ScopeError {
-    #[error("No profiler GpuProfiler scope was previously opened. For each call to `end_scope` you first need to call `begin_scope`.")]
-    NoOpenScope,
+impl Default for GpuProfilerSettings {
+    fn default() -> Self {
+        Self { max_num_pending_frames: 3 }
+    }
 }
 
+/// Profiler instance.
+///
+/// You can have an arbitrary number of independent profiler instances per application/adapter.
+/// Manages all the necessary [`wgpu::QuerySet`] and [`wgpu::Buffer`] behind the scenes.
 pub struct GpuProfiler {
     enable_pass_timer: bool,
     enable_encoder_timer: bool,
@@ -133,7 +146,7 @@ pub struct GpuProfiler {
 
     size_for_new_query_pools: u32,
 
-    max_num_pending_frames: usize,
+    settings: GpuProfilerSettings,
     timestamp_to_sec: f64,
 
     #[cfg(feature = "tracy")]
@@ -152,24 +165,22 @@ impl GpuProfiler {
     /// Creates a new Profiler object.
     ///
     /// There is nothing preventing the use of several independent profiler objects.
-    ///
-    /// A profiler queues up to `max_num_pending_frames` "profiler-frames" at a time.
-    /// A profiler-frame is in-flight until its queries have been successfully resolved using [`GpuProfiler::process_finished_frame`].
-    /// If this threshold is reached, [`GpuProfiler::end_frame`] will drop frames.
-    /// (Typical values for `max_num_pending_frames` are 2~4)
     #[must_use]
-    pub fn new(_adapter: &wgpu::Adapter, device: &wgpu::Device, queue: &wgpu::Queue, max_num_pending_frames: usize) -> Self {
-        assert!(max_num_pending_frames > 0);
+    pub fn new(_adapter: &wgpu::Adapter, device: &wgpu::Device, queue: &wgpu::Queue, settings: GpuProfilerSettings) -> Result<Self, CreationError> {
+        if settings.max_num_pending_frames == 0 {
+            return Err(CreationError::InvalidMaxNumPendingFrames);
+        }
+
         let active_features = device.features();
         let timestamp_period = queue.get_timestamp_period();
-        GpuProfiler {
+        Ok(GpuProfiler {
             enable_pass_timer: active_features.contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES),
             enable_encoder_timer: active_features.contains(wgpu::Features::TIMESTAMP_QUERY),
             enable_debug_marker: true,
 
             unused_pools: Vec::new(),
 
-            pending_frames: Vec::with_capacity(max_num_pending_frames),
+            pending_frames: Vec::with_capacity(settings.max_num_pending_frames),
             active_frame: PendingFrame {
                 query_pools: Vec::new(),
                 mapped_buffers: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
@@ -179,17 +190,12 @@ impl GpuProfiler {
 
             size_for_new_query_pools: QueryPool::MIN_CAPACITY,
 
-            max_num_pending_frames,
+            settings,
             timestamp_to_sec: timestamp_period as f64 / 1000.0 / 1000.0 / 1000.0,
 
             #[cfg(feature = "tracy")]
             tracy_context: tracy::create_tracy_gpu_client(_adapter.get_info().backend, device, queue, timestamp_period),
-        }
-    }
-
-    /// Returns true if a timestamp should be written to the encoder or pass.
-    fn timestamp_write_enabled<Recorder: ProfilerCommandRecorder>(&self, encoder_or_pass: &mut Recorder) -> bool {
-        (encoder_or_pass.is_pass() && self.enable_pass_timer) || (!encoder_or_pass.is_pass() && self.enable_encoder_timer)
+        })
     }
 
     /// Starts a new debug/timer scope on a given encoder or rendering/compute pass.
@@ -309,8 +315,6 @@ impl GpuProfiler {
     /// Needs to be called **after** submitting any encoder used in the current frame.
     ///
     /// Fails if there are still open scopes or unresolved queries.
-    /// Warning: This validation happens only, if the profiler enabled.
-    #[allow(clippy::result_unit_err)]
     pub fn end_frame(&mut self) -> Result<(), EndFrameError> {
         if !self.open_scopes.is_empty() {
             return Err(EndFrameError::UnclosedScopes(
@@ -333,8 +337,8 @@ impl GpuProfiler {
             .max(self.active_frame.query_pools.iter().map(|pool| pool.num_used_queries).sum())
             .min(QUERY_SET_MAX_QUERIES);
 
-        // Make sure we don't overflow
-        if self.pending_frames.len() == self.max_num_pending_frames {
+        // Make sure we don't overflow.
+        if self.pending_frames.len() == self.settings.max_num_pending_frames {
             // Drop previous (!) frame.
             // Dropping the oldest frame could get us into an endless cycle where we're never able to complete
             // any pending frames as the ones closest to completion would be evicted.
@@ -369,7 +373,7 @@ impl GpuProfiler {
         std::mem::swap(&mut frame, &mut self.active_frame);
         self.pending_frames.push(frame);
 
-        assert!(self.pending_frames.len() <= self.max_num_pending_frames);
+        assert!(self.pending_frames.len() <= self.settings.max_num_pending_frames);
 
         Ok(())
     }
@@ -405,6 +409,11 @@ const QUERY_SIZE: u32 = wgpu::QUERY_SIZE;
 const QUERY_SET_MAX_QUERIES: u32 = wgpu::QUERY_SET_MAX_QUERIES;
 
 impl GpuProfiler {
+    /// Returns true if a timestamp should be written to the encoder or pass.
+    fn timestamp_write_enabled<Recorder: ProfilerCommandRecorder>(&self, encoder_or_pass: &mut Recorder) -> bool {
+        (encoder_or_pass.is_pass() && self.enable_pass_timer) || (!encoder_or_pass.is_pass() && self.enable_encoder_timer)
+    }
+
     fn reset_and_cache_unused_query_pools(&mut self, mut query_pools: Vec<QueryPool>) {
         // If a pool was less than half of the size of the max frame, then we don't keep it.
         // This way we're going to need less pools in upcoming frames and thus have less overhead in the long run.
