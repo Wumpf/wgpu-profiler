@@ -165,17 +165,30 @@ impl GpuProfiler {
     /// Creates a new Profiler object.
     ///
     /// There is nothing preventing the use of several independent profiler objects.
-    #[must_use]
-    pub fn new(_adapter: &wgpu::Adapter, device: &wgpu::Device, queue: &wgpu::Queue, settings: GpuProfilerSettings) -> Result<Self, CreationError> {
+    ///
+    /// backend:
+    ///    The backend of the adapter you want to use. This can be retrieved from the adapter via [`wgpu::Adapter::get_info().backend`].
+    ///    Used only when Tracy integration is enabled.
+    ///
+    /// active_device_features:
+    ///    Device features that [`GpuProfiler`] will assume to be active. Pass the result of [`wgpu::Device::features()`].
+    ///    [`GpuProfiler`] will only check for features defined by [`GpuProfiler::ALL_WGPU_TIMER_FEATURES`]
+    ///
+    /// timestamp_period:
+    ///    The timestamp period of the device. Pass the result of [`wgpu::Queue::get_timestamp_period()`].
+    pub fn new(
+        _backend: &wgpu::Backend,
+        active_device_features: &wgpu::Features,
+        timestamp_period: f32,
+        settings: GpuProfilerSettings,
+    ) -> Result<Self, CreationError> {
         if settings.max_num_pending_frames == 0 {
             return Err(CreationError::InvalidMaxNumPendingFrames);
         }
 
-        let active_features = device.features();
-        let timestamp_period = queue.get_timestamp_period();
         Ok(GpuProfiler {
-            enable_pass_timer: active_features.contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES),
-            enable_encoder_timer: active_features.contains(wgpu::Features::TIMESTAMP_QUERY),
+            enable_pass_timer: active_device_features.contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES),
+            enable_encoder_timer: active_device_features.contains(wgpu::Features::TIMESTAMP_QUERY),
             enable_debug_marker: true,
 
             unused_pools: Vec::new(),
@@ -194,7 +207,7 @@ impl GpuProfiler {
             timestamp_to_sec: timestamp_period as f64 / 1000.0 / 1000.0 / 1000.0,
 
             #[cfg(feature = "tracy")]
-            tracy_context: tracy::create_tracy_gpu_client(_adapter.get_info().backend, device, queue, timestamp_period),
+            tracy_context: tracy::create_tracy_gpu_client(_backend, device, queue, timestamp_period),
         })
     }
 

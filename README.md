@@ -17,9 +17,6 @@ Simple profiler scopes for wgpu using timer queries
 * chrome trace flamegraph json export
 * Tracy integration (behind `tracy` feature flag)
 
-TODO:
-* Disable via feature flag
-
 ## How to use
 
 Create a new profiler object:
@@ -79,7 +76,8 @@ dual licensed as above, without any additional terms or conditions.
 ## Changelog
 * unreleased
   * sample & doc fixes, by @waywardmonkeys in [#41](https://github.com/Wumpf/wgpu-profiler/pull/41), [#44](https://github.com/Wumpf/wgpu-profiler/pull/44)
-  * `end_scope` & `end_frame` return `thiserror` errors instead of internal unwrap/except on user errors, by @Wumpf in [#45](https://github.com/Wumpf/wgpu-profiler/pull/45)
+  * various methods return `thiserror` errors instead of internal unwrap/except on user errors, by @Wumpf in [#45](https://github.com/Wumpf/wgpu-profiler/pull/45) and following
+  * 
 * 0.14.2
   * Fix pointing to wrong tracy version, by @waywardmonkeys in [#36](https://github.com/Wumpf/wgpu-profiler/pull/35)
   * Doc fixes, by @waywardmonkeys in [#38](https://github.com/Wumpf/wgpu-profiler/pull/35)
