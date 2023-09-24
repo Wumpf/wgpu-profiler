@@ -1,4 +1,4 @@
-/// Errors that can occur during [`GpuProfiler::new`].
+/// Errors that can occur during profiler creation.
 #[derive(thiserror::Error, Debug)]
 pub enum CreationError {
     #[error(transparent)]
@@ -27,7 +27,7 @@ impl PartialEq for CreationError {
     }
 }
 
-/// Errors that can occur during [`GpuProfiler::new`].
+/// Errors that can occur during settings validation and change.
 #[derive(thiserror::Error, Debug, PartialEq, Eq)]
 pub enum SettingsError {
     #[error("GpuProfilerSettings::max_num_pending_frames must be at least 1.")]
@@ -37,7 +37,7 @@ pub enum SettingsError {
     HasOpenScopes,
 }
 
-/// Errors that can occur during [`GpuProfiler::end_frame`].
+/// Errors that can occur during [`crate::GpuProfiler::end_frame`].
 #[derive(thiserror::Error, Debug, PartialEq, Eq)]
 pub enum EndFrameError {
     #[error("All profiling scopes need to be closed before ending a frame. The following scopes were still open: {0:?}")]
@@ -51,7 +51,7 @@ There were still {0} queries unresolved"
     UnresolvedQueries(u32),
 }
 
-/// Errors that can occur during [`GpuProfiler::end_scope`].
+/// Errors that can occur during [`crate::GpuProfiler::end_scope`].
 #[derive(thiserror::Error, Debug, PartialEq, Eq)]
 pub enum ScopeError {
     #[error("No profiler GpuProfiler scope was previously opened. For each call to `end_scope` you first need to call `begin_scope`.")]
