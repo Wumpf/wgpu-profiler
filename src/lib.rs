@@ -87,6 +87,7 @@ pub mod tracy;
 pub use errors::{CreationError, EndFrameError, ScopeError};
 
 /// The result of a gpu timer scope.
+#[derive(Debug, Clone)]
 pub struct GpuTimerScopeResult {
     /// Label that was specified when opening the scope.
     pub label: String,
@@ -299,6 +300,10 @@ impl GpuProfiler {
     }
 
     /// Puts query resolve commands in the encoder for all unresolved, pending queries of the current profiler frame.
+    ///
+    /// Note that you do *not* need to do this for every encoder, it is sufficient do do this once per frame as long
+    /// as you submit this encoder after all other encoders that may have opened scopes in the same frame.
+    /// (It does not matter if the passed encoder itself has previously opened scopes or not.)
     pub fn resolve_queries(&mut self, encoder: &mut wgpu::CommandEncoder) {
         for query_pool in self.active_frame.query_pools.iter_mut() {
             if query_pool.num_resolved_queries == query_pool.num_used_queries {
@@ -327,7 +332,7 @@ impl GpuProfiler {
 
     /// Marks the end of a frame.
     ///
-    /// Needs to be called **after** submitting any encoder used in the current frame.
+    /// Needs to be called **after** submitting any encoder used in the current profiler frame.
     ///
     /// Fails if there are still open scopes or unresolved queries.
     pub fn end_frame(&mut self) -> Result<(), EndFrameError> {
