@@ -1,9 +1,10 @@
+use crate::CreationError;
+
 pub(crate) fn create_tracy_gpu_client(
     backend: wgpu::Backend,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-    timestamp_period: f32,
-) -> tracy_client::GpuContext {
+) -> Result<tracy_client::GpuContext, CreationError> {
     let query_set = device.create_query_set(&wgpu::QuerySetDescriptor {
         label: Some("wgpu-profiler gpu -> cpu sync query_set"),
         ty: wgpu::QueryType::Timestamp,
@@ -47,7 +48,7 @@ pub(crate) fn create_tracy_gpu_client(
     };
 
     tracy_client::Client::running()
-        .expect("tracy client not running")
-        .new_gpu_context(Some("wgpu"), tracy_backend, timestamp, timestamp_period)
-        .unwrap()
+        .ok_or(CreationError::TracyClientNotRunning)?
+        .new_gpu_context(Some("wgpu"), tracy_backend, timestamp, queue.get_timestamp_period())
+        .map_err(CreationError::from)
 }

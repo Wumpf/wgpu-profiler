@@ -12,7 +12,7 @@ fn scopes_to_console_recursive(results: &[GpuTimerScopeResult], indentation: u32
             print!("{:<width$}", "|", width = 4);
         }
 
-        println!("{:.3}μs - {}", (&scope.time.end - &scope.time.start) * 1000.0 * 1000.0, scope.label);
+        println!("{:.3}μs - {}", (scope.time.end - scope.time.start) * 1000.0 * 1000.0, scope.label);
 
         if !scope.nested_scopes.is_empty() {
             scopes_to_console_recursive(&scope.nested_scopes, indentation + 1);
@@ -113,8 +113,21 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 
     surface.configure(&device, &sc_desc);
 
-    // Create a new profiler instance
-    let mut profiler = GpuProfiler::new(&adapter, &device, &queue, GpuProfilerSettings::default()).expect("Failed to create profiler");
+    // Create a new profiler instance.
+    #[cfg(feature = "tracy")]
+    let mut profiler = GpuProfiler::new_with_tracy_client(GpuProfilerSettings::default(), adapter.get_info().backend, &device, &queue)
+        .unwrap_or_else(|err| match err {
+            CreationError::TracyClientNotRunning | CreationError::TracyGpuContextCreationError(_) => {
+                println!("Failed to connect to Tracy. Continuing without Tracy integration.");
+                GpuProfiler::new(GpuProfilerSettings::default()).expect("Failed to create profiler")
+            }
+            _ => {
+                panic!("Failed to create profiler: {}", err);
+            }
+        });
+    #[cfg(not(feature = "tracy"))]
+    let mut profiler = GpuProfiler::new(GpuProfilerSettings::default()).expect("Failed to create profiler");
+
     let mut latest_profiler_results = None;
 
     event_loop.run(move |event, _, control_flow| {
@@ -209,7 +222,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 // Signal to the profiler that the frame is finished.
                 profiler.end_frame().unwrap();
                 // Query for oldest finished frame (this is almost certainly not the one we just submitted!) and display results in the command line.
-                if let Some(results) = profiler.process_finished_frame() {
+                if let Some(results) = profiler.process_finished_frame(queue.get_timestamp_period()) {
                     latest_profiler_results = Some(results);
                 }
                 console_output(&latest_profiler_results, device.features());

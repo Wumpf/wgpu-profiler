@@ -28,7 +28,7 @@ use wgpu_profiler::*;
 # let (instance, adapter, device, queue) = futures_lite::future::block_on(wgpu_init());
 // ...
 
-let mut profiler = GpuProfiler::new(&adapter, &device, &queue, GpuProfilerSettings::default()).unwrap();
+let mut profiler = GpuProfiler::new(GpuProfilerSettings::default()).unwrap();
 
 // ...
 
@@ -49,7 +49,7 @@ profiler.resolve_queries(&mut encoder);
 profiler.end_frame().unwrap();
 
 // Retrieving the oldest available frame and writing it out to a chrome trace file.
-if let Some(profiling_data) = profiler.process_finished_frame() {
+if let Some(profiling_data) = profiler.process_finished_frame(queue.get_timestamp_period()) {
     # let button_pressed = false;
     // You usually want to write to disk only under some condition, e.g. press of a key.
     if button_pressed {
@@ -134,23 +134,24 @@ impl Default for GpuProfilerSettings {
 /// You can have an arbitrary number of independent profiler instances per application/adapter.
 /// Manages all the necessary [`wgpu::QuerySet`] and [`wgpu::Buffer`] behind the scenes.
 pub struct GpuProfiler {
-    enable_pass_timer: bool,
-    enable_encoder_timer: bool,
     pub enable_debug_marker: bool,
 
     unused_pools: Vec<QueryPool>,
 
     pending_frames: Vec<PendingFrame>,
     active_frame: PendingFrame,
+
     open_scopes: Vec<UnprocessedTimerScope>,
 
     size_for_new_query_pools: u32,
 
     settings: GpuProfilerSettings,
-    timestamp_to_sec: f64,
+
+    /// Features of active device, lazily filled in on first call to [`GpuProfiler::begin_scope`].
+    device_features: Option<wgpu::Features>,
 
     #[cfg(feature = "tracy")]
-    tracy_context: tracy_client::GpuContext,
+    tracy_context: Option<tracy_client::GpuContext>,
 }
 
 // Public interface
@@ -165,17 +166,12 @@ impl GpuProfiler {
     /// Creates a new Profiler object.
     ///
     /// There is nothing preventing the use of several independent profiler objects.
-    #[must_use]
-    pub fn new(_adapter: &wgpu::Adapter, device: &wgpu::Device, queue: &wgpu::Queue, settings: GpuProfilerSettings) -> Result<Self, CreationError> {
+    pub fn new(settings: GpuProfilerSettings) -> Result<Self, CreationError> {
         if settings.max_num_pending_frames == 0 {
             return Err(CreationError::InvalidMaxNumPendingFrames);
         }
 
-        let active_features = device.features();
-        let timestamp_period = queue.get_timestamp_period();
         Ok(GpuProfiler {
-            enable_pass_timer: active_features.contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES),
-            enable_encoder_timer: active_features.contains(wgpu::Features::TIMESTAMP_QUERY),
             enable_debug_marker: true,
 
             unused_pools: Vec::new(),
@@ -191,25 +187,44 @@ impl GpuProfiler {
             size_for_new_query_pools: QueryPool::MIN_CAPACITY,
 
             settings,
-            timestamp_to_sec: timestamp_period as f64 / 1000.0 / 1000.0 / 1000.0,
+
+            device_features: None,
 
             #[cfg(feature = "tracy")]
-            tracy_context: tracy::create_tracy_gpu_client(_adapter.get_info().backend, device, queue, timestamp_period),
+            tracy_context: None,
         })
     }
 
-    /// Starts a new debug/timer scope on a given encoder or rendering/compute pass.
+    /// Creates a new profiler and connects to a running Tracy client.
+    #[cfg(feature = "tracy")]
+    pub fn new_with_tracy_client(
+        settings: GpuProfilerSettings,
+        backend: wgpu::Backend,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Result<Self, CreationError> {
+        let mut profiler = Self::new(settings)?;
+        profiler.tracy_context = Some(tracy::create_tracy_gpu_client(backend, device, queue)?);
+        Ok(profiler)
+    }
+
+    /// Starts a new debug & timer scope on a given encoder or rendering/compute pass if enabled.
     ///
-    /// Scopes can be arbitrarily nested.
+    /// If an [`wgpu::CommandEncoder`] is passed but the [`wgpu::Device`]
+    /// does not support [`wgpu::Features::TIMESTAMP_QUERY`], no scope will be opened.
+    /// If an [`wgpu::ComputePass`] or [`wgpu::RenderPass`] is passed but the [`wgpu::Device`]
+    /// does not support [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES`], no scope will be opened.
     ///
-    /// May create new wgpu query objects (which is why it needs a [`wgpu::Device`] reference).
+    /// May allocate a new [`wgpu::QuerySet`] and [`wgpu::Buffer`] internally if necessary.
+    /// After the first call, the same [`wgpu::Device`] must be used with all subsequent calls
+    /// (and all passed references to wgpu objects must originate from that device).
     ///
-    /// If encoder/pass timer queries are disabled respectively, no scope will be opened.
-    ///
-    /// See also [`wgpu_profiler!`], [`GpuProfiler::end_scope`]
+    /// See also [`GpuProfiler::end_scope`], [`wgpu_profiler!`]
     #[track_caller]
     pub fn begin_scope<Recorder: ProfilerCommandRecorder>(&mut self, label: &str, encoder_or_pass: &mut Recorder, device: &wgpu::Device) {
-        if self.timestamp_write_enabled(encoder_or_pass) {
+        let features = self.device_features.get_or_insert_with(|| device.features());
+
+        if timestamp_write_supported(encoder_or_pass, features) {
             let start_query = self.allocate_query_pair(device);
 
             encoder_or_pass.write_timestamp(
@@ -228,7 +243,10 @@ impl GpuProfiler {
                 pid,
                 tid,
                 #[cfg(feature = "tracy")]
-                tracy_scope: self.tracy_context.span_alloc(label, "", _location.file(), _location.line()).ok(),
+                tracy_scope: self
+                    .tracy_context
+                    .as_ref()
+                    .and_then(|c| c.span_alloc(label, "", _location.file(), _location.line()).ok()),
             });
         }
 
@@ -237,26 +255,22 @@ impl GpuProfiler {
         }
     }
 
-    /// Ends a debug/timer scope.
+    /// Ends currently open debug & timer scope if any.
     ///
-    /// If encoder/pass timer queries are disabled respectively, will not attempt to end a scope.
-    /// Returns an error if no scope has been opened previously.
+    /// Fails if no scope was previously opened.
+    /// Behavior is not defined if the last open scope was opened on a different encoder or pass.
+    ///
+    /// If the previous call to `begin_scope` did not open a timer scope because it was not supported or disabled,
+    /// this call will do nothing (except closing the currently open debug scope if enabled).
     ///
     /// See also [`wgpu_profiler!`], [`GpuProfiler::begin_scope`]
     pub fn end_scope<Recorder: ProfilerCommandRecorder>(&mut self, encoder_or_pass: &mut Recorder) -> Result<(), ScopeError> {
-        if self.timestamp_write_enabled(encoder_or_pass) {
-            let mut open_scope = self.open_scopes.pop().ok_or(ScopeError::NoOpenScope)?;
+        // Devices features are lazily filled in on first call to begin_scope.
+        // If we don't have them yet, we can't have any open scopes.
+        let features = self.device_features.as_ref().ok_or(errors::ScopeError::NoOpenScope)?;
 
-            debug_assert!(
-                (encoder_or_pass.is_pass() && self.enable_pass_timer) || (!encoder_or_pass.is_pass() && self.enable_encoder_timer),
-                "Scope was opened with a query, but queries are disabled.\n
-                `encoder_or_pass.is_pass()`: {}\n
-                self.enable_pass_timer: {}\n
-                self.enable_encoder_timer: {}",
-                encoder_or_pass.is_pass(),
-                self.enable_pass_timer,
-                self.enable_encoder_timer
-            );
+        if timestamp_write_supported(encoder_or_pass, features) {
+            let mut open_scope = self.open_scopes.pop().ok_or(ScopeError::NoOpenScope)?;
 
             encoder_or_pass.write_timestamp(
                 &self.active_frame.query_pools[open_scope.start_query.pool_idx as usize].query_set,
@@ -276,6 +290,7 @@ impl GpuProfiler {
                 self.active_frame.closed_scopes.push(open_scope);
             }
         }
+
         if self.enable_debug_marker {
             encoder_or_pass.pop_debug_group();
         }
@@ -379,7 +394,10 @@ impl GpuProfiler {
     }
 
     /// Checks if all timer queries for the oldest pending finished frame are done and returns that snapshot if any.
-    pub fn process_finished_frame(&mut self) -> Option<Vec<GpuTimerScopeResult>> {
+    ///
+    /// timestamp_period:
+    ///    The timestamp period of the device. Pass the result of [`wgpu::Queue::get_timestamp_period()`].
+    pub fn process_finished_frame(&mut self, timestamp_period: f32) -> Option<Vec<GpuTimerScopeResult>> {
         let frame = self.pending_frames.first_mut()?;
 
         // We only process if all mappings succeed.
@@ -392,7 +410,9 @@ impl GpuProfiler {
         let results = {
             let read_query_buffers: Vec<wgpu::BufferView> =
                 frame.query_pools.iter().map(|pool| pool.read_buffer_slice().get_mapped_range()).collect();
-            Self::process_timings_recursive(self.timestamp_to_sec, &read_query_buffers, frame.closed_scopes)
+
+            let timestamp_to_sec = timestamp_period as f64 / 1000.0 / 1000.0 / 1000.0;
+            Self::process_timings_recursive(timestamp_to_sec, &read_query_buffers, frame.closed_scopes)
         };
 
         self.reset_and_cache_unused_query_pools(frame.query_pools);
@@ -408,12 +428,17 @@ impl GpuProfiler {
 const QUERY_SIZE: u32 = wgpu::QUERY_SIZE;
 const QUERY_SET_MAX_QUERIES: u32 = wgpu::QUERY_SET_MAX_QUERIES;
 
-impl GpuProfiler {
-    /// Returns true if a timestamp should be written to the encoder or pass.
-    fn timestamp_write_enabled<Recorder: ProfilerCommandRecorder>(&self, encoder_or_pass: &mut Recorder) -> bool {
-        (encoder_or_pass.is_pass() && self.enable_pass_timer) || (!encoder_or_pass.is_pass() && self.enable_encoder_timer)
-    }
+/// Returns true if a timestamp should be written to the encoder or pass.
+fn timestamp_write_supported<Recorder: ProfilerCommandRecorder>(encoder_or_pass: &mut Recorder, features: &wgpu::Features) -> bool {
+    let required_feature = if encoder_or_pass.is_pass() {
+        wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES
+    } else {
+        wgpu::Features::TIMESTAMP_QUERY
+    };
+    features.contains(required_feature)
+}
 
+impl GpuProfiler {
     fn reset_and_cache_unused_query_pools(&mut self, mut query_pools: Vec<QueryPool>) {
         // If a pool was less than half of the size of the max frame, then we don't keep it.
         // This way we're going to need less pools in upcoming frames and thus have less overhead in the long run.
