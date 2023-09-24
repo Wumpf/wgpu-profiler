@@ -1,28 +1,12 @@
 use wgpu_profiler::GpuProfilerSettings;
 
-fn create_device() -> (wgpu::Adapter, wgpu::Device, wgpu::Queue) {
-    async fn create_default_device_async() -> (wgpu::Adapter, wgpu::Device, wgpu::Queue) {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
-        let adapter = instance.request_adapter(&wgpu::RequestAdapterOptions::default()).await.unwrap();
-        let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    features: wgpu::Features::TIMESTAMP_QUERY,
-                    ..Default::default()
-                },
-                None,
-            )
-            .await
-            .unwrap();
-        (adapter, device, queue)
-    }
+mod utils;
 
-    futures_lite::future::block_on(create_default_device_async())
-}
+use utils::create_device;
 
 #[test]
 fn invalid_pending_frame_count() {
-    let (adapter, device, queue) = create_device();
+    let (adapter, device, queue) = create_device(wgpu::Features::empty());
 
     let profiler = wgpu_profiler::GpuProfiler::new(
         &adapter,
@@ -38,7 +22,7 @@ fn invalid_pending_frame_count() {
 
 #[test]
 fn end_frame_unclosed_scope() {
-    let (adapter, device, queue) = create_device();
+    let (adapter, device, queue) = create_device(wgpu::Features::TIMESTAMP_QUERY);
 
     let mut profiler = wgpu_profiler::GpuProfiler::new(&adapter, &device, &queue, GpuProfilerSettings::default()).unwrap();
     {
@@ -63,7 +47,7 @@ fn end_frame_unclosed_scope() {
 
 #[test]
 fn end_frame_unresolved_scope() {
-    let (adapter, device, queue) = create_device();
+    let (adapter, device, queue) = create_device(wgpu::Features::TIMESTAMP_QUERY);
 
     let mut profiler = wgpu_profiler::GpuProfiler::new(&adapter, &device, &queue, GpuProfilerSettings::default()).unwrap();
     {
@@ -84,7 +68,7 @@ fn end_frame_unresolved_scope() {
 
 #[test]
 fn no_open_scope() {
-    let (adapter, device, queue) = create_device();
+    let (adapter, device, queue) = create_device(wgpu::Features::TIMESTAMP_QUERY);
 
     let mut profiler = wgpu_profiler::GpuProfiler::new(&adapter, &device, &queue, GpuProfilerSettings::default()).unwrap();
     {

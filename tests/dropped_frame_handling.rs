@@ -1,24 +1,12 @@
 use wgpu_profiler::GpuProfilerSettings;
 
-#[test]
-fn handle_dropped_frames_gracefully() {
-    futures_lite::future::block_on(handle_dropped_frames_gracefully_async());
-}
+mod utils;
+
+use utils::create_device;
 
 // regression test for bug described in https://github.com/Wumpf/wgpu-profiler/pull/18
-async fn handle_dropped_frames_gracefully_async() {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
-    let adapter = instance.request_adapter(&wgpu::RequestAdapterOptions::default()).await.unwrap();
-    let (device, queue) = adapter
-        .request_device(
-            &wgpu::DeviceDescriptor {
-                features: wgpu::Features::TIMESTAMP_QUERY,
-                ..Default::default()
-            },
-            None,
-        )
-        .await
-        .unwrap();
+fn handle_dropped_frames_gracefully() {
+    let (adapter, device, queue) = create_device(wgpu::Features::TIMESTAMP_QUERY);
 
     // max_num_pending_frames is one!
     let mut profiler = wgpu_profiler::GpuProfiler::new(
