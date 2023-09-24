@@ -106,19 +106,22 @@ pub struct GpuTimerScopeResult {
 /// Settings passed on initialization of [`GpuProfiler`].
 #[derive(Debug, Clone)]
 pub struct GpuProfilerSettings {
-    /// If set to false, the profiler will not emit any timer queries, making most operations on [`GpuProfiler`] no-ops.
+    /// Enables/disables the profiler.
+    ///
+    /// If false, the profiler will not emit any timer queries, making most operations on [`GpuProfiler`] no-ops.
     ///
     /// Since all resource creation is done lazily, this provides an effective way of disabling the profiler at runtime
     /// without the need of special build configurations or code to handle enabled/disabled profiling.
     pub enable_timer_scopes: bool,
 
-    /// If true, the profiler will inject debug markers for each scope into the respective encoder or pass.
+    /// Enables/disables debug markers for all scopes on the respective encoder or pass.
     ///
     /// This is useful for debugging with tools like RenderDoc.
-    /// Debug markers will be emitted even if the device does not support timer queries.
+    /// Debug markers will be emitted even if the device does not support timer queries or disables them via
+    /// [`GpuProfilerSettings::enable_timer_scopes`].
     pub enable_debug_groups: bool,
 
-    /// A profiler queues up to `max_num_pending_frames` "profiler-frames" at a time.
+    /// The profiler queues up to `max_num_pending_frames` "profiler-frames" at a time.
     ///
     /// A profiler-frame is regarded as in-flight until its queries have been successfully
     /// resolved using [`GpuProfiler::process_finished_frame`].
@@ -233,14 +236,15 @@ impl GpuProfiler {
     ///
     /// This fails if there are open profiling scopes.
     ///
-    /// If timer scopes are disabled, any timer queries that are in flight will still be processed,
+    /// If timer scopes are disabled (by setting [GpuProfilerSettings::enable_timer_scopes] to false),
+    /// any timer queries that are in flight will still be processed,
     /// but unused query sets and buffers will be deallocated during [`Self::process_finished_frame`].
     pub fn change_settings(&mut self, settings: GpuProfilerSettings) -> Result<(), SettingsError> {
         if !self.open_scopes.is_empty() {
             Err(SettingsError::HasOpenScopes)
         } else {
             settings.validate()?;
-            if !settings.enable_debug_groups {
+            if !settings.enable_timer_scopes {
                 self.unused_pools.clear();
             }
             self.settings = settings;
