@@ -1,8 +1,8 @@
 /// Errors that can occur during [`GpuProfiler::new`].
 #[derive(thiserror::Error, Debug)]
 pub enum CreationError {
-    #[error("GpuProfilerSettings::max_num_pending_frames must be at least 1.")]
-    InvalidMaxNumPendingFrames,
+    #[error(transparent)]
+    InvalidSettings(#[from] SettingsError),
 
     #[cfg(feature = "tracy")]
     #[error("Tracy client doesn't run yet.")]
@@ -25,6 +25,16 @@ impl PartialEq for CreationError {
             _ => core::mem::discriminant(self) == core::mem::discriminant(other),
         }
     }
+}
+
+/// Errors that can occur during [`GpuProfiler::new`].
+#[derive(thiserror::Error, Debug, PartialEq, Eq)]
+pub enum SettingsError {
+    #[error("GpuProfilerSettings::max_num_pending_frames must be at least 1.")]
+    InvalidMaxNumPendingFrames,
+
+    #[error("Can't change settings while there's open profiling scopes.")]
+    HasOpenScopes,
 }
 
 /// Errors that can occur during [`GpuProfiler::end_frame`].

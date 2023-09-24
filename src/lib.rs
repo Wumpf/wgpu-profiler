@@ -84,7 +84,7 @@ pub mod scope;
 #[cfg(feature = "tracy")]
 pub mod tracy;
 
-pub use errors::{CreationError, EndFrameError, ScopeError};
+pub use errors::{CreationError, EndFrameError, ScopeError, SettingsError};
 
 /// The result of a gpu timer scope.
 #[derive(Debug, Clone)]
@@ -106,6 +106,18 @@ pub struct GpuTimerScopeResult {
 /// Settings passed on initialization of [`GpuProfiler`].
 #[derive(Debug, Clone)]
 pub struct GpuProfilerSettings {
+    /// If set to false, the profiler will not emit any timer queries, making most operations on [`GpuProfiler`] no-ops.
+    ///
+    /// Since all resource creation is done lazily, this provides an effective way of disabling the profiler at runtime
+    /// without the need of special build configurations or code to handle enabled/disabled profiling.
+    pub enable_timer_scopes: bool,
+
+    /// If true, the profiler will inject debug markers for each scope into the respective encoder or pass.
+    ///
+    /// This is useful for debugging with tools like RenderDoc.
+    /// Debug markers will be emitted even if the device does not support timer queries.
+    pub enable_debug_groups: bool,
+
     /// A profiler queues up to `max_num_pending_frames` "profiler-frames" at a time.
     ///
     /// A profiler-frame is regarded as in-flight until its queries have been successfully
@@ -126,7 +138,21 @@ pub struct GpuProfilerSettings {
 
 impl Default for GpuProfilerSettings {
     fn default() -> Self {
-        Self { max_num_pending_frames: 3 }
+        Self {
+            enable_timer_scopes: true,
+            enable_debug_groups: true,
+            max_num_pending_frames: 3,
+        }
+    }
+}
+
+impl GpuProfilerSettings {
+    pub fn validate(&self) -> Result<(), SettingsError> {
+        if self.max_num_pending_frames == 0 {
+            Err(SettingsError::InvalidMaxNumPendingFrames)
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -135,8 +161,6 @@ impl Default for GpuProfilerSettings {
 /// You can have an arbitrary number of independent profiler instances per application/adapter.
 /// Manages all the necessary [`wgpu::QuerySet`] and [`wgpu::Buffer`] behind the scenes.
 pub struct GpuProfiler {
-    pub enable_debug_marker: bool,
-
     unused_pools: Vec<QueryPool>,
 
     pending_frames: Vec<PendingFrame>,
@@ -168,13 +192,9 @@ impl GpuProfiler {
     ///
     /// There is nothing preventing the use of several independent profiler objects.
     pub fn new(settings: GpuProfilerSettings) -> Result<Self, CreationError> {
-        if settings.max_num_pending_frames == 0 {
-            return Err(CreationError::InvalidMaxNumPendingFrames);
-        }
+        settings.validate()?;
 
         Ok(GpuProfiler {
-            enable_debug_marker: true,
-
             unused_pools: Vec::new(),
 
             pending_frames: Vec::with_capacity(settings.max_num_pending_frames),
@@ -209,6 +229,26 @@ impl GpuProfiler {
         Ok(profiler)
     }
 
+    /// Changes the settings of an existing profiler.
+    ///
+    /// This fails if there are open profiling scopes.
+    ///
+    /// If timer scopes are disabled, any timer queries that are in flight will still be processed,
+    /// but unused query sets and buffers will be deallocated during [`Self::process_finished_frame`].
+    pub fn change_settings(&mut self, settings: GpuProfilerSettings) -> Result<(), SettingsError> {
+        if !self.open_scopes.is_empty() {
+            Err(SettingsError::HasOpenScopes)
+        } else {
+            settings.validate()?;
+            if !settings.enable_debug_groups {
+                self.unused_pools.clear();
+            }
+            self.settings = settings;
+
+            Ok(())
+        }
+    }
+
     /// Starts a new debug & timer scope on a given encoder or rendering/compute pass if enabled.
     ///
     /// If an [`wgpu::CommandEncoder`] is passed but the [`wgpu::Device`]
@@ -225,7 +265,7 @@ impl GpuProfiler {
     pub fn begin_scope<Recorder: ProfilerCommandRecorder>(&mut self, label: &str, encoder_or_pass: &mut Recorder, device: &wgpu::Device) {
         let features = self.device_features.get_or_insert_with(|| device.features());
 
-        if timestamp_write_supported(encoder_or_pass, features) {
+        if self.settings.enable_timer_scopes && timestamp_write_supported(encoder_or_pass, features) {
             let start_query = self.allocate_query_pair(device);
 
             encoder_or_pass.write_timestamp(
@@ -251,7 +291,7 @@ impl GpuProfiler {
             });
         }
 
-        if self.enable_debug_marker {
+        if self.settings.enable_debug_groups {
             encoder_or_pass.push_debug_group(label);
         }
     }
@@ -270,7 +310,7 @@ impl GpuProfiler {
         // If we don't have them yet, we can't have any open scopes.
         let features = self.device_features.as_ref().ok_or(errors::ScopeError::NoOpenScope)?;
 
-        if timestamp_write_supported(encoder_or_pass, features) {
+        if self.settings.enable_timer_scopes && timestamp_write_supported(encoder_or_pass, features) {
             let mut open_scope = self.open_scopes.pop().ok_or(ScopeError::NoOpenScope)?;
 
             encoder_or_pass.write_timestamp(
@@ -292,7 +332,7 @@ impl GpuProfiler {
             }
         }
 
-        if self.enable_debug_marker {
+        if self.settings.enable_debug_groups {
             encoder_or_pass.pop_debug_group();
         }
 
@@ -447,10 +487,11 @@ impl GpuProfiler {
     fn reset_and_cache_unused_query_pools(&mut self, mut query_pools: Vec<QueryPool>) {
         // If a pool was less than half of the size of the max frame, then we don't keep it.
         // This way we're going to need less pools in upcoming frames and thus have less overhead in the long run.
+        // If timer scopes were disabled, we also don't keep any pools.
         let capacity_threshold = self.size_for_new_query_pools / 2;
         for mut pool in query_pools.drain(..) {
             pool.reset();
-            if pool.capacity >= capacity_threshold {
+            if self.settings.enable_timer_scopes && pool.capacity >= capacity_threshold {
                 self.unused_pools.push(pool);
             }
         }

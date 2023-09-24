@@ -62,6 +62,20 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
         }
     }
     drop(Scope::start("e2_s0", &mut profiler, &mut encoder2, device));
+    {
+        // Another scope, but with the profiler disabled which should be possible on the fly.
+        profiler
+            .change_settings(GpuProfilerSettings {
+                enable_timer_scopes: false,
+                ..Default::default()
+            })
+            .unwrap();
+        let mut scope = Scope::start("e2_s1", &mut profiler, &mut encoder0, device);
+        {
+            let mut scope = scope.scoped_compute_pass("e2_s1_c1", device, &wgpu::ComputePassDescriptor::default());
+            drop(scope.scope("e2_s1_c1_s0", device));
+        }
+    }
 
     profiler.resolve_queries(&mut encoder2);
     queue.submit([encoder0.finish(), encoder1.finish(), encoder2.finish()]);
@@ -119,7 +133,7 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
             ),
             ExpectedScope("e2_s0", Requires::Timestamps, &[]),
         ],
-    )
+    );
 }
 
 #[test]
