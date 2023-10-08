@@ -1,25 +1,20 @@
-#[test]
-fn handle_dropped_frames_gracefully() {
-    futures_lite::future::block_on(handle_dropped_frames_gracefully_async());
-}
+use wgpu_profiler::GpuProfilerSettings;
+
+mod utils;
+
+use utils::create_device;
 
 // regression test for bug described in https://github.com/Wumpf/wgpu-profiler/pull/18
-async fn handle_dropped_frames_gracefully_async() {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
-    let adapter = instance.request_adapter(&wgpu::RequestAdapterOptions::default()).await.unwrap();
-    let (device, queue) = adapter
-        .request_device(
-            &wgpu::DeviceDescriptor {
-                features: wgpu::Features::TIMESTAMP_QUERY,
-                ..Default::default()
-            },
-            None,
-        )
-        .await
-        .unwrap();
+#[test]
+fn handle_dropped_frames_gracefully() {
+    let (_, device, queue) = create_device(wgpu::Features::TIMESTAMP_QUERY);
 
     // max_num_pending_frames is one!
-    let mut profiler = wgpu_profiler::GpuProfiler::new(&adapter, &device, &queue, 1);
+    let mut profiler = wgpu_profiler::GpuProfiler::new(GpuProfilerSettings {
+        max_num_pending_frames: 1,
+        ..Default::default()
+    })
+    .unwrap();
 
     // Two frames without device poll, causing the profiler to drop a frame on the second round.
     for _ in 0..2 {
@@ -31,13 +26,13 @@ async fn handle_dropped_frames_gracefully_async() {
         profiler.end_frame().unwrap();
 
         // We haven't done a device poll, so there can't be a result!
-        assert!(profiler.process_finished_frame().is_none());
+        assert!(profiler.process_finished_frame(queue.get_timestamp_period()).is_none());
     }
 
     // Poll to explicitly trigger mapping callbacks.
     device.poll(wgpu::Maintain::Wait);
 
     // A single (!) frame should now be available.
-    assert!(profiler.process_finished_frame().is_some());
-    assert!(profiler.process_finished_frame().is_none());
+    assert!(profiler.process_finished_frame(queue.get_timestamp_period()).is_some());
+    assert!(profiler.process_finished_frame(queue.get_timestamp_period()).is_none());
 }

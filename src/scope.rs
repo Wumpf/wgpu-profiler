@@ -4,6 +4,7 @@
 use crate::{GpuProfiler, ProfilerCommandRecorder};
 
 /// Scope that takes a (mutable) reference to the encoder/pass.
+///
 /// Calls [`GpuProfiler::end_scope()`] on drop.
 pub struct Scope<'a, W: ProfilerCommandRecorder> {
     profiler: &'a mut GpuProfiler,
@@ -11,6 +12,7 @@ pub struct Scope<'a, W: ProfilerCommandRecorder> {
 }
 
 /// Scope that takes ownership of the encoder/pass.
+///
 /// Calls [`GpuProfiler::end_scope()`] on drop.
 pub struct OwningScope<'a, W: ProfilerCommandRecorder> {
     profiler: &'a mut GpuProfiler,
@@ -18,6 +20,7 @@ pub struct OwningScope<'a, W: ProfilerCommandRecorder> {
 }
 
 /// Scope that takes ownership of the encoder/pass.
+///
 /// Does NOT call [`GpuProfiler::end_scope()`] on drop.
 /// This construct is just for completeness in cases where working with scopes is preferred but one can't rely on the Drop call in the right place.
 /// This is useful when the owned value needs to be recovered after the end of the scope.

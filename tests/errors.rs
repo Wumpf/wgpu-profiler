@@ -1,28 +1,28 @@
-fn create_device() -> (wgpu::Adapter, wgpu::Device, wgpu::Queue) {
-    async fn create_default_device_async() -> (wgpu::Adapter, wgpu::Device, wgpu::Queue) {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
-        let adapter = instance.request_adapter(&wgpu::RequestAdapterOptions::default()).await.unwrap();
-        let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    features: wgpu::Features::TIMESTAMP_QUERY,
-                    ..Default::default()
-                },
-                None,
-            )
-            .await
-            .unwrap();
-        (adapter, device, queue)
-    }
+use wgpu_profiler::GpuProfilerSettings;
 
-    futures_lite::future::block_on(create_default_device_async())
+mod utils;
+
+use utils::create_device;
+
+#[test]
+fn invalid_pending_frame_count() {
+    let profiler = wgpu_profiler::GpuProfiler::new(wgpu_profiler::GpuProfilerSettings {
+        max_num_pending_frames: 0,
+        ..Default::default()
+    });
+    assert!(matches!(
+        profiler,
+        Err(wgpu_profiler::CreationError::InvalidSettings(
+            wgpu_profiler::SettingsError::InvalidMaxNumPendingFrames
+        ))
+    ));
 }
 
 #[test]
 fn end_frame_unclosed_scope() {
-    let (adapter, device, queue) = create_device();
+    let (_, device, _) = create_device(wgpu::Features::TIMESTAMP_QUERY);
 
-    let mut profiler = wgpu_profiler::GpuProfiler::new(&adapter, &device, &queue, 1);
+    let mut profiler = wgpu_profiler::GpuProfiler::new(GpuProfilerSettings::default()).unwrap();
     {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
         profiler.begin_scope("open scope", &mut encoder, &device);
@@ -45,9 +45,9 @@ fn end_frame_unclosed_scope() {
 
 #[test]
 fn end_frame_unresolved_scope() {
-    let (adapter, device, queue) = create_device();
+    let (_, device, _) = create_device(wgpu::Features::TIMESTAMP_QUERY);
 
-    let mut profiler = wgpu_profiler::GpuProfiler::new(&adapter, &device, &queue, 1);
+    let mut profiler = wgpu_profiler::GpuProfiler::new(GpuProfilerSettings::default()).unwrap();
     {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
         profiler.begin_scope("open scope", &mut encoder, &device);
@@ -66,9 +66,9 @@ fn end_frame_unresolved_scope() {
 
 #[test]
 fn no_open_scope() {
-    let (adapter, device, queue) = create_device();
+    let (_, device, _) = create_device(wgpu::Features::TIMESTAMP_QUERY);
 
-    let mut profiler = wgpu_profiler::GpuProfiler::new(&adapter, &device, &queue, 1);
+    let mut profiler = wgpu_profiler::GpuProfiler::new(GpuProfilerSettings::default()).unwrap();
     {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
         assert_eq!(profiler.end_scope(&mut encoder), Err(wgpu_profiler::ScopeError::NoOpenScope));
@@ -81,4 +81,19 @@ fn no_open_scope() {
         profiler.resolve_queries(&mut encoder);
     }
     assert_eq!(profiler.end_frame(), Ok(()));
+}
+
+#[test]
+fn change_settings_while_scope_open() {
+    let (_, device, _) = create_device(wgpu::Features::TIMESTAMP_QUERY);
+
+    let mut profiler = wgpu_profiler::GpuProfiler::new(GpuProfilerSettings::default()).unwrap();
+
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+    profiler.begin_scope("open scope", &mut encoder, &device);
+
+    assert_eq!(
+        profiler.change_settings(GpuProfilerSettings::default()),
+        Err(wgpu_profiler::SettingsError::HasOpenScopes)
+    );
 }
