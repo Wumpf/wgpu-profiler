@@ -446,6 +446,8 @@ impl GpuProfiler {
     ///
     /// timestamp_period:
     ///    The timestamp period of the device. Pass the result of [`wgpu::Queue::get_timestamp_period()`].
+    ///    Note that some implementations (Chrome as of writing) may converge to a timestamp period while the application is running,
+    ///    so caching this value is usually not recommended.
     pub fn process_finished_frame(&mut self, timestamp_period: f32) -> Option<Vec<GpuTimerScopeResult>> {
         let frame = self.pending_frames.first_mut()?;
 

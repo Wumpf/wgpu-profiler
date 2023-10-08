@@ -1,4 +1,5 @@
 /// Errors that can occur during profiler creation.
+#[cfg_attr(not(feature = "tracy"), derive(PartialEq))]
 #[derive(thiserror::Error, Debug)]
 pub enum CreationError {
     #[error(transparent)]
@@ -13,19 +14,26 @@ pub enum CreationError {
     TracyGpuContextCreationError(#[from] tracy_client::GpuContextCreationError),
 }
 
+#[cfg(feature = "tracy")]
 impl PartialEq for CreationError {
     fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            #[cfg(feature = "tracy")]
-            (Self::TracyGpuContextCreationError(left), Self::TracyGpuContextCreationError(right)) => match left {
-                tracy_client::GpuContextCreationError::TooManyContextsCreated => match right {
-                    tracy_client::GpuContextCreationError::TooManyContextsCreated => true,
-                },
+        match self {
+            CreationError::InvalidSettings(left) => match other {
+                CreationError::InvalidSettings(right) => left == right,
+                _ => false,
             },
-            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+            CreationError::TracyClientNotRunning => matches!(other, CreationError::TracyClientNotRunning),
+            CreationError::TracyGpuContextCreationError(left) => match left {
+                tracy_client::GpuContextCreationError::TooManyContextsCreated => matches!(
+                    other,
+                    CreationError::TracyGpuContextCreationError(tracy_client::GpuContextCreationError::TooManyContextsCreated)
+                ),
+            },
         }
     }
 }
+
+impl Eq for CreationError {}
 
 /// Errors that can occur during settings validation and change.
 #[derive(thiserror::Error, Debug, PartialEq, Eq)]

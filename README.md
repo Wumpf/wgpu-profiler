@@ -76,7 +76,7 @@ dual licensed as above, without any additional terms or conditions.
 ## Changelog
 * unreleased
   * sample & doc fixes, by @waywardmonkeys in [#41](https://github.com/Wumpf/wgpu-profiler/pull/41), [#44](https://github.com/Wumpf/wgpu-profiler/pull/44)
-  * various methods return `thiserror` errors instead of internal unwrap/except on user errors, by @Wumpf in [#45](https://github.com/Wumpf/wgpu-profiler/pull/45) and following
+  * various methods return `thiserror` errors instead of internal unwrap/except on user errors, by @Wumpf in [#45](https://github.com/Wumpf/wgpu-profiler/pull/45) and following PRs
   * overhauled `GpuProfiler` creation & configuration:
     * takes settings object that can be changed after the fact (allows disabling on the fly!)
     * adapter/queue/device no longer needed on creation unless tracy client is required.
