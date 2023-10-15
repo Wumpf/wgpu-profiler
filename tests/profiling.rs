@@ -45,24 +45,26 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
     let mut encoder2 = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
 
     {
-        let mut scope = Scope::start("e0_s0", &mut profiler, &mut encoder0, device);
+        let mut outer_scope = Scope::start("e0_s0", &mut profiler, &mut encoder0, device);
         {
-            drop(scope.scoped_compute_pass(
+            drop(outer_scope.scoped_compute_pass(
                 "e0_s0_c0",
                 device,
                 &wgpu::ComputePassDescriptor::default(),
             ));
-            let mut scope = scope.scoped_compute_pass(
-                "e0_s0_c1",
-                device,
-                &wgpu::ComputePassDescriptor::default(),
-            );
             {
-                drop(scope.scope("e0_s0_c1_s0", device));
-                let mut scope = scope.scope("e0_s0_c1_s1", device);
+                let mut inner_scope = outer_scope.scoped_compute_pass(
+                    "e0_s0_c1",
+                    device,
+                    &wgpu::ComputePassDescriptor::default(),
+                );
                 {
-                    let mut scope = scope.scope("e0_s0_c1_s1_s0", device);
-                    drop(scope.scope("e0_s0_c1_s1_s0_s0", device));
+                    drop(inner_scope.scope("e0_s0_c1_s0", device));
+                    // let mut innermost_scope = inner_scope.scope("e0_s0_c1_s1", device);
+                    // {
+                    //     let mut scope = innermost_scope.scope("e0_s0_c1_s1_s0", device);
+                    //     drop(scope.scope("e0_s0_c1_s1_s0_s0", device));
+                    // }
                 }
             }
         }
