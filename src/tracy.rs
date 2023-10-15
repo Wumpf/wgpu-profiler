@@ -40,7 +40,9 @@ pub(crate) fn create_tracy_gpu_client(
     let timestamp: i64 = i64::from_le_bytes((*view).try_into().unwrap());
 
     let tracy_backend = match backend {
-        wgpu::Backend::Empty | wgpu::Backend::Metal | wgpu::Backend::BrowserWebGpu => tracy_client::GpuContextType::Invalid,
+        wgpu::Backend::Empty | wgpu::Backend::Metal | wgpu::Backend::BrowserWebGpu => {
+            tracy_client::GpuContextType::Invalid
+        }
         wgpu::Backend::Vulkan => tracy_client::GpuContextType::Vulkan,
         wgpu::Backend::Dx12 => tracy_client::GpuContextType::Direct3D12,
         wgpu::Backend::Dx11 => tracy_client::GpuContextType::Direct3D11,
@@ -49,6 +51,11 @@ pub(crate) fn create_tracy_gpu_client(
 
     tracy_client::Client::running()
         .ok_or(CreationError::TracyClientNotRunning)?
-        .new_gpu_context(Some("wgpu"), tracy_backend, timestamp, queue.get_timestamp_period())
+        .new_gpu_context(
+            Some("wgpu"),
+            tracy_backend,
+            timestamp,
+            queue.get_timestamp_period(),
+        )
         .map_err(CreationError::from)
 }

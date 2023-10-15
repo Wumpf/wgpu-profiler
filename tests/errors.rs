@@ -31,7 +31,9 @@ fn end_frame_unclosed_scope() {
 
     assert_eq!(
         profiler.end_frame(),
-        Err(wgpu_profiler::EndFrameError::UnclosedScopes(vec!["open scope".to_string()]))
+        Err(wgpu_profiler::EndFrameError::UnclosedScopes(vec![
+            "open scope".to_string()
+        ]))
     );
 
     // Make sure we can recover from this.
@@ -54,7 +56,10 @@ fn end_frame_unresolved_scope() {
         profiler.end_scope(&mut encoder).unwrap();
     }
 
-    assert_eq!(profiler.end_frame(), Err(wgpu_profiler::EndFrameError::UnresolvedQueries(2)));
+    assert_eq!(
+        profiler.end_frame(),
+        Err(wgpu_profiler::EndFrameError::UnresolvedQueries(2))
+    );
 
     // Make sure we can recover from this!
     {
@@ -71,7 +76,10 @@ fn no_open_scope() {
     let mut profiler = wgpu_profiler::GpuProfiler::new(GpuProfilerSettings::default()).unwrap();
     {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-        assert_eq!(profiler.end_scope(&mut encoder), Err(wgpu_profiler::ScopeError::NoOpenScope));
+        assert_eq!(
+            profiler.end_scope(&mut encoder),
+            Err(wgpu_profiler::ScopeError::NoOpenScope)
+        );
     }
     // Make sure we can recover from this.
     {

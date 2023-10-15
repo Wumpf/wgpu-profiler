@@ -3,7 +3,10 @@ use std::{fs::File, io::Write, path::Path};
 use crate::GpuTimerScopeResult;
 
 /// Writes a .json trace file that can be viewed as a flame graph in Chrome or Edge via <chrome://tracing>
-pub fn write_chrometrace(target: &Path, profile_data: &[GpuTimerScopeResult]) -> std::io::Result<()> {
+pub fn write_chrometrace(
+    target: &Path,
+    profile_data: &[GpuTimerScopeResult],
+) -> std::io::Result<()> {
     let mut file = File::create(target)?;
 
     writeln!(file, "{{")?;
@@ -22,7 +25,11 @@ pub fn write_chrometrace(target: &Path, profile_data: &[GpuTimerScopeResult]) ->
     Ok(())
 }
 
-fn write_results_recursive(file: &mut File, result: &GpuTimerScopeResult, last: bool) -> std::io::Result<()> {
+fn write_results_recursive(
+    file: &mut File,
+    result: &GpuTimerScopeResult,
+    last: bool,
+) -> std::io::Result<()> {
     // note: ThreadIds are under the control of Rust’s standard library
     // and there may not be any relationship between ThreadId and the underlying platform’s notion of a thread identifier
     //
@@ -45,13 +52,21 @@ fn write_results_recursive(file: &mut File, result: &GpuTimerScopeResult, last: 
         result.time.start * 1000.0 * 1000.0,
         (result.time.end - result.time.start) * 1000.0 * 1000.0,
         result.label,
-        if last && result.nested_scopes.is_empty() { "\n" } else { ",\n" }
+        if last && result.nested_scopes.is_empty() {
+            "\n"
+        } else {
+            ",\n"
+        }
     )?;
     if result.nested_scopes.is_empty() {
         return Ok(());
     }
 
-    for child in result.nested_scopes.iter().take(result.nested_scopes.len() - 1) {
+    for child in result
+        .nested_scopes
+        .iter()
+        .take(result.nested_scopes.len() - 1)
+    {
         write_results_recursive(file, child, false)?;
     }
     write_results_recursive(file, result.nested_scopes.last().unwrap(), last)?;

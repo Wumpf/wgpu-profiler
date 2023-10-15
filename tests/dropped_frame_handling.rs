@@ -20,19 +20,30 @@ fn handle_dropped_frames_gracefully() {
     for _ in 0..2 {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
         {
-            let _ = wgpu_profiler::scope::Scope::start("testscope", &mut profiler, &mut encoder, &device);
+            let _ = wgpu_profiler::scope::Scope::start(
+                "testscope",
+                &mut profiler,
+                &mut encoder,
+                &device,
+            );
         }
         profiler.resolve_queries(&mut encoder);
         profiler.end_frame().unwrap();
 
         // We haven't done a device poll, so there can't be a result!
-        assert!(profiler.process_finished_frame(queue.get_timestamp_period()).is_none());
+        assert!(profiler
+            .process_finished_frame(queue.get_timestamp_period())
+            .is_none());
     }
 
     // Poll to explicitly trigger mapping callbacks.
     device.poll(wgpu::Maintain::Wait);
 
     // A single (!) frame should now be available.
-    assert!(profiler.process_finished_frame(queue.get_timestamp_period()).is_some());
-    assert!(profiler.process_finished_frame(queue.get_timestamp_period()).is_none());
+    assert!(profiler
+        .process_finished_frame(queue.get_timestamp_period())
+        .is_some());
+    assert!(profiler
+        .process_finished_frame(queue.get_timestamp_period())
+        .is_none());
 }

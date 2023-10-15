@@ -12,7 +12,11 @@ fn scopes_to_console_recursive(results: &[GpuTimerScopeResult], indentation: u32
             print!("{:<width$}", "|", width = 4);
         }
 
-        println!("{:.3}μs - {}", (scope.time.end - scope.time.start) * 1000.0 * 1000.0, scope.label);
+        println!(
+            "{:.3}μs - {}",
+            (scope.time.end - scope.time.start) * 1000.0 * 1000.0,
+            scope.label
+        );
 
         if !scope.nested_scopes.is_empty() {
             scopes_to_console_recursive(&scope.nested_scopes, indentation + 1);
@@ -27,7 +31,9 @@ fn console_output(results: &Option<Vec<GpuTimerScopeResult>>, enabled_features: 
     println!();
     println!("Enabled device features: {:?}", enabled_features);
     println!();
-    println!("Press space to write out a trace file that can be viewed in chrome's chrome://tracing");
+    println!(
+        "Press space to write out a trace file that can be viewed in chrome's chrome://tracing"
+    );
     println!();
     match results {
         Some(results) => {
@@ -115,18 +121,24 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 
     // Create a new profiler instance.
     #[cfg(feature = "tracy")]
-    let mut profiler = GpuProfiler::new_with_tracy_client(GpuProfilerSettings::default(), adapter.get_info().backend, &device, &queue)
-        .unwrap_or_else(|err| match err {
-            CreationError::TracyClientNotRunning | CreationError::TracyGpuContextCreationError(_) => {
-                println!("Failed to connect to Tracy. Continuing without Tracy integration.");
-                GpuProfiler::new(GpuProfilerSettings::default()).expect("Failed to create profiler")
-            }
-            _ => {
-                panic!("Failed to create profiler: {}", err);
-            }
-        });
+    let mut profiler = GpuProfiler::new_with_tracy_client(
+        GpuProfilerSettings::default(),
+        adapter.get_info().backend,
+        &device,
+        &queue,
+    )
+    .unwrap_or_else(|err| match err {
+        CreationError::TracyClientNotRunning | CreationError::TracyGpuContextCreationError(_) => {
+            println!("Failed to connect to Tracy. Continuing without Tracy integration.");
+            GpuProfiler::new(GpuProfilerSettings::default()).expect("Failed to create profiler")
+        }
+        _ => {
+            panic!("Failed to create profiler: {}", err);
+        }
+    });
     #[cfg(not(feature = "tracy"))]
-    let mut profiler = GpuProfiler::new(GpuProfilerSettings::default()).expect("Failed to create profiler");
+    let mut profiler =
+        GpuProfiler::new(GpuProfilerSettings::default()).expect("Failed to create profiler");
 
     let mut latest_profiler_results = None;
 
@@ -155,9 +167,14 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
             Event::RedrawRequested(_) => {
                 profiling::scope!("Redraw Requested");
 
-                let frame = surface.get_current_texture().expect("Failed to acquire next surface texture");
-                let frame_view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
-                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+                let frame = surface
+                    .get_current_texture()
+                    .expect("Failed to acquire next surface texture");
+                let frame_view = frame
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor::default());
+                let mut encoder =
+                    device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
                 wgpu_profiler!("rendering", &mut profiler, &mut encoder, &device, {
                     profiling::scope!("Rendering");
@@ -189,7 +206,12 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     });
                     // ... or a scope object
                     {
-                        let mut rpass = wgpu_profiler::scope::Scope::start("fractal 1", &mut profiler, &mut rpass, &device);
+                        let mut rpass = wgpu_profiler::scope::Scope::start(
+                            "fractal 1",
+                            &mut profiler,
+                            &mut rpass,
+                            &device,
+                        );
                         rpass.draw(0..6, 1..2);
                     }
                     // ... or simply manually
@@ -200,7 +222,12 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     }
                     // ... or a scope object that takes ownership of the pass
                     {
-                        let mut scoped_pass = wgpu_profiler::scope::OwningScope::start("fractal 3", &mut profiler, rpass, &device);
+                        let mut scoped_pass = wgpu_profiler::scope::OwningScope::start(
+                            "fractal 3",
+                            &mut profiler,
+                            rpass,
+                            &device,
+                        );
                         scoped_pass.draw(0..6, 3..4);
                     }
                 });
@@ -222,7 +249,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 // Signal to the profiler that the frame is finished.
                 profiler.end_frame().unwrap();
                 // Query for oldest finished frame (this is almost certainly not the one we just submitted!) and display results in the command line.
-                if let Some(results) = profiler.process_finished_frame(queue.get_timestamp_period()) {
+                if let Some(results) = profiler.process_finished_frame(queue.get_timestamp_period())
+                {
                     latest_profiler_results = Some(results);
                 }
                 console_output(&latest_profiler_results, device.features());
@@ -242,8 +270,11 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     VirtualKeyCode::Escape => *control_flow = ControlFlow::Exit,
                     VirtualKeyCode::Space => {
                         if let Some(profile_data) = &latest_profiler_results {
-                            wgpu_profiler::chrometrace::write_chrometrace(std::path::Path::new("trace.json"), profile_data)
-                                .expect("Failed to write trace.json");
+                            wgpu_profiler::chrometrace::write_chrometrace(
+                                std::path::Path::new("trace.json"),
+                                profile_data,
+                            )
+                            .expect("Failed to write trace.json");
                         }
                     }
                     _ => {}
@@ -259,6 +290,8 @@ fn main() {
     tracy_client::Client::start();
     //env_logger::init_from_env(env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "warn"));
     let event_loop = EventLoop::new();
-    let window = winit::window::WindowBuilder::new().build(&event_loop).unwrap();
+    let window = winit::window::WindowBuilder::new()
+        .build(&event_loop)
+        .unwrap();
     futures_lite::future::block_on(run(event_loop, window));
 }

@@ -22,11 +22,15 @@ impl PartialEq for CreationError {
                 CreationError::InvalidSettings(right) => left == right,
                 _ => false,
             },
-            CreationError::TracyClientNotRunning => matches!(other, CreationError::TracyClientNotRunning),
+            CreationError::TracyClientNotRunning => {
+                matches!(other, CreationError::TracyClientNotRunning)
+            }
             CreationError::TracyGpuContextCreationError(left) => match left {
                 tracy_client::GpuContextCreationError::TooManyContextsCreated => matches!(
                     other,
-                    CreationError::TracyGpuContextCreationError(tracy_client::GpuContextCreationError::TooManyContextsCreated)
+                    CreationError::TracyGpuContextCreationError(
+                        tracy_client::GpuContextCreationError::TooManyContextsCreated
+                    )
                 ),
             },
         }

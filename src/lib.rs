@@ -185,7 +185,8 @@ pub struct GpuProfiler {
 // Public interface
 impl GpuProfiler {
     /// Combination of all timer query features [`GpuProfiler`] can leverage.
-    pub const ALL_WGPU_TIMER_FEATURES: wgpu::Features = wgpu::Features::TIMESTAMP_QUERY.union(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES);
+    pub const ALL_WGPU_TIMER_FEATURES: wgpu::Features =
+        wgpu::Features::TIMESTAMP_QUERY.union(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES);
 
     /// Combination of all timer query features [`GpuProfiler`] can leverage.
     #[deprecated(since = "0.9.0", note = "Use ALL_WGPU_TIMER_FEATURES instead")]
@@ -266,10 +267,18 @@ impl GpuProfiler {
     ///
     /// See also [`GpuProfiler::end_scope`], [`wgpu_profiler!`]
     #[track_caller]
-    pub fn begin_scope<Recorder: ProfilerCommandRecorder>(&mut self, label: &str, encoder_or_pass: &mut Recorder, device: &wgpu::Device) {
-        let features = self.device_features.get_or_insert_with(|| device.features());
+    pub fn begin_scope<Recorder: ProfilerCommandRecorder>(
+        &mut self,
+        label: &str,
+        encoder_or_pass: &mut Recorder,
+        device: &wgpu::Device,
+    ) {
+        let features = self
+            .device_features
+            .get_or_insert_with(|| device.features());
 
-        if self.settings.enable_timer_scopes && timestamp_write_supported(encoder_or_pass, features) {
+        if self.settings.enable_timer_scopes && timestamp_write_supported(encoder_or_pass, features)
+        {
             let start_query = self.allocate_query_pair(device);
 
             encoder_or_pass.write_timestamp(
@@ -288,10 +297,10 @@ impl GpuProfiler {
                 pid,
                 tid,
                 #[cfg(feature = "tracy")]
-                tracy_scope: self
-                    .tracy_context
-                    .as_ref()
-                    .and_then(|c| c.span_alloc(label, "", _location.file(), _location.line()).ok()),
+                tracy_scope: self.tracy_context.as_ref().and_then(|c| {
+                    c.span_alloc(label, "", _location.file(), _location.line())
+                        .ok()
+                }),
             });
         }
 
@@ -309,12 +318,19 @@ impl GpuProfiler {
     /// this call will do nothing (except closing the currently open debug scope if enabled).
     ///
     /// See also [`wgpu_profiler!`], [`GpuProfiler::begin_scope`]
-    pub fn end_scope<Recorder: ProfilerCommandRecorder>(&mut self, encoder_or_pass: &mut Recorder) -> Result<(), ScopeError> {
+    pub fn end_scope<Recorder: ProfilerCommandRecorder>(
+        &mut self,
+        encoder_or_pass: &mut Recorder,
+    ) -> Result<(), ScopeError> {
         // Devices features are lazily filled in on first call to begin_scope.
         // If we don't have them yet, we can't have any open scopes.
-        let features = self.device_features.as_ref().ok_or(errors::ScopeError::NoOpenScope)?;
+        let features = self
+            .device_features
+            .as_ref()
+            .ok_or(errors::ScopeError::NoOpenScope)?;
 
-        if self.settings.enable_timer_scopes && timestamp_write_supported(encoder_or_pass, features) {
+        if self.settings.enable_timer_scopes && timestamp_write_supported(encoder_or_pass, features)
+        {
             let mut open_scope = self.open_scopes.pop().ok_or(ScopeError::NoOpenScope)?;
 
             encoder_or_pass.write_timestamp(
@@ -382,7 +398,10 @@ impl GpuProfiler {
     pub fn end_frame(&mut self) -> Result<(), EndFrameError> {
         if !self.open_scopes.is_empty() {
             return Err(EndFrameError::UnclosedScopes(
-                self.open_scopes.iter().map(|open_scope| open_scope.label.clone()).collect(),
+                self.open_scopes
+                    .iter()
+                    .map(|open_scope| open_scope.label.clone())
+                    .collect(),
             ));
         }
 
@@ -398,7 +417,13 @@ impl GpuProfiler {
 
         self.size_for_new_query_pools = self
             .size_for_new_query_pools
-            .max(self.active_frame.query_pools.iter().map(|pool| pool.num_used_queries).sum())
+            .max(
+                self.active_frame
+                    .query_pools
+                    .iter()
+                    .map(|pool| pool.num_used_queries)
+                    .sum(),
+            )
             .min(QUERY_SET_MAX_QUERIES);
 
         // Make sure we don't overflow.
@@ -416,20 +441,21 @@ impl GpuProfiler {
         // Map all buffers.
         for pool in self.active_frame.query_pools.iter_mut() {
             let mapped_buffers = self.active_frame.mapped_buffers.clone();
-            pool.read_buffer_slice().map_async(wgpu::MapMode::Read, move |mapping_result| {
-                // Mapping should not fail unless it was cancelled due to the frame being dropped.
-                match mapping_result {
-                    Err(_) => {
-                        // We only want to ignore the error iff the mapping has been aborted by us (due to a dropped frame, see above).
-                        // In any other case, we need should panic as this would imply something went seriously sideways.
-                        //
-                        // As of writing, this is not yet possible in wgpu, see https://github.com/gfx-rs/wgpu/pull/2939
+            pool.read_buffer_slice()
+                .map_async(wgpu::MapMode::Read, move |mapping_result| {
+                    // Mapping should not fail unless it was cancelled due to the frame being dropped.
+                    match mapping_result {
+                        Err(_) => {
+                            // We only want to ignore the error iff the mapping has been aborted by us (due to a dropped frame, see above).
+                            // In any other case, we need should panic as this would imply something went seriously sideways.
+                            //
+                            // As of writing, this is not yet possible in wgpu, see https://github.com/gfx-rs/wgpu/pull/2939
+                        }
+                        Ok(()) => {
+                            mapped_buffers.fetch_add(1, std::sync::atomic::Ordering::Release);
+                        }
                     }
-                    Ok(()) => {
-                        mapped_buffers.fetch_add(1, std::sync::atomic::Ordering::Release);
-                    }
-                }
-            });
+                });
         }
 
         // Enqueue
@@ -448,22 +474,36 @@ impl GpuProfiler {
     ///    The timestamp period of the device. Pass the result of [`wgpu::Queue::get_timestamp_period()`].
     ///    Note that some implementations (Chrome as of writing) may converge to a timestamp period while the application is running,
     ///    so caching this value is usually not recommended.
-    pub fn process_finished_frame(&mut self, timestamp_period: f32) -> Option<Vec<GpuTimerScopeResult>> {
+    pub fn process_finished_frame(
+        &mut self,
+        timestamp_period: f32,
+    ) -> Option<Vec<GpuTimerScopeResult>> {
         let frame = self.pending_frames.first_mut()?;
 
         // We only process if all mappings succeed.
-        if frame.mapped_buffers.load(std::sync::atomic::Ordering::Acquire) != frame.query_pools.len() {
+        if frame
+            .mapped_buffers
+            .load(std::sync::atomic::Ordering::Acquire)
+            != frame.query_pools.len()
+        {
             return None;
         }
 
         let frame = self.pending_frames.remove(0);
 
         let results = {
-            let read_query_buffers: Vec<wgpu::BufferView> =
-                frame.query_pools.iter().map(|pool| pool.read_buffer_slice().get_mapped_range()).collect();
+            let read_query_buffers: Vec<wgpu::BufferView> = frame
+                .query_pools
+                .iter()
+                .map(|pool| pool.read_buffer_slice().get_mapped_range())
+                .collect();
 
             let timestamp_to_sec = timestamp_period as f64 / 1000.0 / 1000.0 / 1000.0;
-            Self::process_timings_recursive(timestamp_to_sec, &read_query_buffers, frame.closed_scopes)
+            Self::process_timings_recursive(
+                timestamp_to_sec,
+                &read_query_buffers,
+                frame.closed_scopes,
+            )
         };
 
         self.reset_and_cache_unused_query_pools(frame.query_pools);
@@ -480,7 +520,10 @@ const QUERY_SIZE: u32 = wgpu::QUERY_SIZE;
 const QUERY_SET_MAX_QUERIES: u32 = wgpu::QUERY_SET_MAX_QUERIES;
 
 /// Returns true if a timestamp should be written to the encoder or pass.
-fn timestamp_write_supported<Recorder: ProfilerCommandRecorder>(encoder_or_pass: &mut Recorder, features: &wgpu::Features) -> bool {
+fn timestamp_write_supported<Recorder: ProfilerCommandRecorder>(
+    encoder_or_pass: &mut Recorder,
+    features: &wgpu::Features,
+) -> bool {
     let required_feature = if encoder_or_pass.is_pass() {
         wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES
     } else {
@@ -554,7 +597,11 @@ impl GpuProfiler {
                 let nested_scopes = if scope.nested_scopes.is_empty() {
                     Vec::new()
                 } else {
-                    Self::process_timings_recursive(timestamp_to_sec, resolved_query_buffers, scope.nested_scopes)
+                    Self::process_timings_recursive(
+                        timestamp_to_sec,
+                        resolved_query_buffers,
+                        scope.nested_scopes,
+                    )
                 };
 
                 // Read timestamp from buffer.
@@ -562,9 +609,14 @@ impl GpuProfiler {
                 let offset = (scope.start_query.query_idx * QUERY_SIZE) as usize;
 
                 // By design timestamps for start/end are consecutive.
-                let start_raw = u64::from_le_bytes(buffer[offset..(offset + std::mem::size_of::<u64>())].try_into().unwrap());
+                let start_raw = u64::from_le_bytes(
+                    buffer[offset..(offset + std::mem::size_of::<u64>())]
+                        .try_into()
+                        .unwrap(),
+                );
                 let end_raw = u64::from_le_bytes(
-                    buffer[(offset + std::mem::size_of::<u64>())..(offset + std::mem::size_of::<u64>() * 2)]
+                    buffer[(offset + std::mem::size_of::<u64>())
+                        ..(offset + std::mem::size_of::<u64>() * 2)]
                         .try_into()
                         .unwrap(),
                 );
@@ -576,7 +628,8 @@ impl GpuProfiler {
 
                 GpuTimerScopeResult {
                     label: scope.label,
-                    time: (start_raw as f64 * timestamp_to_sec)..(end_raw as f64 * timestamp_to_sec),
+                    time: (start_raw as f64 * timestamp_to_sec)
+                        ..(end_raw as f64 * timestamp_to_sec),
                     nested_scopes,
                     pid: scope.pid,
                     tid: scope.tid,
@@ -652,7 +705,8 @@ impl QueryPool {
     }
 
     fn read_buffer_slice(&self) -> wgpu::BufferSlice {
-        self.read_buffer.slice(0..(self.num_resolved_queries * QUERY_SIZE) as u64)
+        self.read_buffer
+            .slice(0..(self.num_resolved_queries * QUERY_SIZE) as u64)
     }
 }
 

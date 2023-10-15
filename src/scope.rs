@@ -34,7 +34,12 @@ impl<'a, W: ProfilerCommandRecorder> Scope<'a, W> {
     /// Starts a new profiler scope. Scope is closed on drop.
     #[must_use]
     #[track_caller]
-    pub fn start(label: &str, profiler: &'a mut GpuProfiler, recorder: &'a mut W, device: &wgpu::Device) -> Self {
+    pub fn start(
+        label: &str,
+        profiler: &'a mut GpuProfiler,
+        recorder: &'a mut W,
+        device: &wgpu::Device,
+    ) -> Self {
         profiler.begin_scope(label, recorder, device);
         Self { profiler, recorder }
     }
@@ -51,7 +56,12 @@ impl<'a, W: ProfilerCommandRecorder> OwningScope<'a, W> {
     /// Starts a new profiler scope. Scope is closed on drop.
     #[must_use]
     #[track_caller]
-    pub fn start(label: &str, profiler: &'a mut GpuProfiler, mut recorder: W, device: &wgpu::Device) -> Self {
+    pub fn start(
+        label: &str,
+        profiler: &'a mut GpuProfiler,
+        mut recorder: W,
+        device: &wgpu::Device,
+    ) -> Self {
         profiler.begin_scope(label, &mut recorder, device);
         Self { profiler, recorder }
     }
@@ -68,7 +78,12 @@ impl<'a, W: ProfilerCommandRecorder> ManualOwningScope<'a, W> {
     /// Starts a new profiler scope. Scope is NOT closed on drop and needs to be closed manually with [`ManualOwningScope::end_scope`]
     #[must_use]
     #[track_caller]
-    pub fn start(label: &str, profiler: &'a mut GpuProfiler, mut recorder: W, device: &wgpu::Device) -> Self {
+    pub fn start(
+        label: &str,
+        profiler: &'a mut GpuProfiler,
+        mut recorder: W,
+        device: &wgpu::Device,
+    ) -> Self {
         profiler.begin_scope(label, &mut recorder, device);
         Self { profiler, recorder }
     }

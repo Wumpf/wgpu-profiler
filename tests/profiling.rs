@@ -11,16 +11,26 @@ enum Requires {
 #[derive(Debug)]
 struct ExpectedScope(&'static str, Requires, &'static [ExpectedScope]);
 
-fn validate_results(features: wgpu::Features, result: &[GpuTimerScopeResult], expected: &[ExpectedScope]) {
+fn validate_results(
+    features: wgpu::Features,
+    result: &[GpuTimerScopeResult],
+    expected: &[ExpectedScope],
+) {
     let expected = expected
         .iter()
         .filter(|expected| match expected.1 {
             Requires::Timestamps => features.contains(wgpu::Features::TIMESTAMP_QUERY),
-            Requires::TimestampsInPasses => features.contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES),
+            Requires::TimestampsInPasses => {
+                features.contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES)
+            }
         })
         .collect::<Vec<_>>();
 
-    assert_eq!(result.len(), expected.len(), "result: {result:?}\nexpected: {expected:?}");
+    assert_eq!(
+        result.len(),
+        expected.len(),
+        "result: {result:?}\nexpected: {expected:?}"
+    );
     for (result, expected) in result.iter().zip(expected.iter()) {
         assert_eq!(result.label, expected.0);
         validate_results(features, &result.nested_scopes, &expected.2);
@@ -37,8 +47,16 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
     {
         let mut scope = Scope::start("e0_s0", &mut profiler, &mut encoder0, device);
         {
-            drop(scope.scoped_compute_pass("e0_s0_c0", device, &wgpu::ComputePassDescriptor::default()));
-            let mut scope = scope.scoped_compute_pass("e0_s0_c1", device, &wgpu::ComputePassDescriptor::default());
+            drop(scope.scoped_compute_pass(
+                "e0_s0_c0",
+                device,
+                &wgpu::ComputePassDescriptor::default(),
+            ));
+            let mut scope = scope.scoped_compute_pass(
+                "e0_s0_c1",
+                device,
+                &wgpu::ComputePassDescriptor::default(),
+            );
             {
                 drop(scope.scope("e0_s0_c1_s0", device));
                 let mut scope = scope.scope("e0_s0_c1_s1", device);
@@ -72,7 +90,11 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
             .unwrap();
         let mut scope = Scope::start("e2_s1", &mut profiler, &mut encoder0, device);
         {
-            let mut scope = scope.scoped_compute_pass("e2_s1_c1", device, &wgpu::ComputePassDescriptor::default());
+            let mut scope = scope.scoped_compute_pass(
+                "e2_s1_c1",
+                device,
+                &wgpu::ComputePassDescriptor::default(),
+            );
             drop(scope.scope("e2_s1_c1_s0", device));
         }
     }
@@ -84,7 +106,9 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
     device.poll(wgpu::Maintain::Wait);
 
     // Single frame should now be available.
-    let frame = profiler.process_finished_frame(queue.get_timestamp_period()).unwrap();
+    let frame = profiler
+        .process_finished_frame(queue.get_timestamp_period())
+        .unwrap();
 
     // Check if the frame gives us the expected nesting of timer scopes.
     validate_results(
@@ -108,7 +132,11 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
                                     "e0_s0_c1_s1_s0",
                                     Requires::TimestampsInPasses,
                                     &[
-                                        ExpectedScope("e0_s0_c1_s1_s0_s0", Requires::TimestampsInPasses, &[]), //
+                                        ExpectedScope(
+                                            "e0_s0_c1_s1_s0_s0",
+                                            Requires::TimestampsInPasses,
+                                            &[],
+                                        ), //
                                     ],
                                 )],
                             ),
