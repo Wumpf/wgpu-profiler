@@ -45,10 +45,7 @@ fn console_output(results: &Option<Vec<GpuTimerScopeResult>>, enabled_features: 
 
 async fn run(event_loop: EventLoop<()>, window: Window) {
     let size = window.inner_size();
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::all(),
-        dx12_shader_compiler: wgpu::Dx12Compiler::default(),
-    });
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
     let surface = unsafe { instance.create_surface(&window) }.expect("Failed to create surface.");
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptions {
@@ -191,10 +188,12 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                                     b: 237.0 / 255.0,
                                     a: 1.0,
                                 }),
-                                store: true,
+                                store: wgpu::StoreOp::Store,
                             },
                         })],
                         depth_stencil_attachment: None,
+                        occlusion_query_set: None,
+                        timestamp_writes: None,
                     });
 
                     // Obviously all the following draw calls could be collapsed, but they are separated to illustrate the different profiler scopes.
