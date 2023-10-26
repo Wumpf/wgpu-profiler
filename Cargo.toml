@@ -17,7 +17,7 @@ tracy = ["tracy-client", "profiling/profile-with-tracy"]
 [dependencies]
 thiserror = "1"
 tracy-client = { version = "0.16", optional = true }
-wgpu = "0.17"
+wgpu = "0.18"
 
 [dev-dependencies]
 futures-lite = "1"
