@@ -76,9 +76,10 @@ On [`GpuProfiler::end_frame`], we memorize the total size of all `QueryPool`s in
 */
 
 use std::{
+    collections::HashMap,
     convert::TryInto,
     ops::Range,
-    sync::atomic::{AtomicUsize, Ordering},
+    sync::atomic::{AtomicU32, Ordering},
     thread::ThreadId,
 };
 
@@ -112,40 +113,37 @@ pub struct GpuTimerScopeResult {
     pub nested_scopes: Vec<GpuTimerScopeResult>,
 }
 
+/// Internal handle to building a tree of profiling scopes.
+type GpuTimerScopeTreeHandle = u32;
+
 /// An in-flight GPU timer scope.
 ///
 /// *Must* be closed by calling [`GpuProfiler::end_scope`] or delegated using [`OpenTimerScope::take`].
 /// Will cause debug assertion if dropped without being closed.
 ///
 /// Emitted by [`GpuProfiler::begin_scope`] and consumed by [`GpuProfiler::end_scope`].
-pub struct OpenTimerScope<'a> {
-    scope: Option<UnprocessedTimerScope>,
-    parent: Option<&'a mut Self>,
-}
+pub struct GpuTimerScope {
+    /// The label assigned to this scope.
+    /// Will be moved into [`GpuTimerScopeResult::label`] once the scope is fully processed.
+    pub label: String,
 
-impl<'a> OpenTimerScope<'a> {
-    /// Moves the unprocessed gpu timer scope out of self into a new scope.
-    ///
-    /// Using `self` on `end_scope` will behave like a no-op afterwards.
-    /// This is useful for `Drop` implementations of wrapping scopes.
-    #[inline]
-    pub fn take(&mut self) -> Self {
-        OpenTimerScope {
-            scope: self.scope.take(),
-            parent: self.parent.take(),
-        }
-    }
-}
+    /// The process id of the process that opened this scope.
+    pub pid: u32,
 
-impl Drop for OpenTimerScope<'_> {
-    #[inline]
-    fn drop(&mut self) {
-        debug_assert!(
-            self.scope.is_none(),
-            "Gpu timer scope {:?} was not closed!",
-            self.scope.as_ref().unwrap().label
-        );
-    }
+    /// The thread id of the thread that opened this scope.
+    pub tid: ThreadId,
+
+    /// Address of the start query (if any). The end query is always the next in line.
+    start_query: Option<QueryPoolQueryAddress>,
+
+    /// Handle which identifies this scope, used for building the tree of scopes.
+    handle: GpuTimerScopeTreeHandle,
+
+    /// Which if any scope this is a child of.
+    parent_handle: Option<GpuTimerScopeTreeHandle>,
+
+    #[cfg(feature = "tracy")]
+    tracy_scope: Option<tracy_client::GpuSpan>,
 }
 
 /// Settings passed on initialization of [`GpuProfiler`].
@@ -213,14 +211,13 @@ pub struct GpuProfiler {
 
     pending_frames: Vec<PendingFrame>,
     active_frame: PendingFrame,
-    num_open_scopes: AtomicUsize,
+
+    num_open_scopes: AtomicU32,
+    next_scope_handle: AtomicU32,
 
     size_for_new_query_pools: u32,
 
     settings: GpuProfilerSettings,
-
-    /// Features of active device, lazily filled in on first call to [`GpuProfiler::begin_scope`].
-    device_features: Option<wgpu::Features>,
 
     #[cfg(feature = "tracy")]
     tracy_context: Option<tracy_client::GpuContext>,
@@ -249,15 +246,15 @@ impl GpuProfiler {
             active_frame: PendingFrame {
                 query_pools: Vec::new(),
                 mapped_buffers: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
-                closed_top_level_scopes: Vec::new(),
+                closed_scope_by_parent_handle: HashMap::new(),
             },
-            num_open_scopes: AtomicUsize::new(0),
+
+            num_open_scopes: AtomicU32::new(0),
+            next_scope_handle: AtomicU32::new(0),
 
             size_for_new_query_pools: QueryPool::MIN_CAPACITY,
 
             settings,
-
-            device_features: None,
 
             #[cfg(feature = "tracy")]
             tracy_context: None,
@@ -315,25 +312,24 @@ impl GpuProfiler {
     /// TODO: UPDATE DOCS
     #[track_caller]
     #[must_use]
-    pub fn begin_scope<'a, Recorder: ProfilerCommandRecorder>(
+    pub fn begin_scope<Recorder: ProfilerCommandRecorder>(
         &mut self,
-        label: &str,
+        label: impl Into<String>,
         encoder_or_pass: &mut Recorder,
         device: &wgpu::Device,
-        parent: Option<&'a mut OpenTimerScope<'a>>,
-    ) -> OpenTimerScope<'a> {
+        parent_scope: Option<&GpuTimerScope>,
+    ) -> GpuTimerScope {
         self.num_open_scopes.fetch_add(1, Ordering::Acquire);
+        let handle = self.next_scope_handle.fetch_add(1, Ordering::Relaxed);
 
-        let features = self
-            .device_features
-            .get_or_insert_with(|| device.features());
+        let label = label.into();
 
         if self.settings.enable_debug_groups {
-            encoder_or_pass.push_debug_group(label);
+            encoder_or_pass.push_debug_group(&label);
         }
 
-        let scope = if self.settings.enable_timer_scopes
-            && timestamp_write_supported(encoder_or_pass, features)
+        let (start_query, _tracy_scope) = if self.settings.enable_timer_scopes
+            && timestamp_write_supported(encoder_or_pass, device.features())
         {
             let start_query = self.allocate_query_pair(device);
 
@@ -342,27 +338,32 @@ impl GpuProfiler {
                 start_query.query_idx,
             );
 
-            let pid = std::process::id();
-            let tid = std::thread::current().id();
-            let _location = std::panic::Location::caller();
-
-            Some(UnprocessedTimerScope {
-                label: String::from(label),
-                start_query,
-                closed_nested_scopes: Vec::new(),
-                pid,
-                tid,
-                #[cfg(feature = "tracy")]
-                tracy_scope: self.tracy_context.as_ref().and_then(|c| {
-                    c.span_alloc(label, "", _location.file(), _location.line())
+            #[cfg(feature = "tracy")]
+            let tracy_scope = {
+                let location = std::panic::Location::caller();
+                self.tracy_context.as_ref().and_then(|c| {
+                    c.span_alloc(label, "", location.file(), location.line())
                         .ok()
-                }),
-            })
+                })
+            };
+            #[cfg(not(feature = "tracy"))]
+            let tracy_scope = Option::<()>::None;
+
+            (Some(start_query), tracy_scope)
         } else {
-            None
+            (None, None)
         };
 
-        OpenTimerScope { scope, parent }
+        GpuTimerScope {
+            label,
+            pid: std::process::id(),
+            tid: std::thread::current().id(),
+            start_query,
+            handle,
+            parent_handle: parent_scope.map(|s| s.handle),
+            #[cfg(feature = "tracy")]
+            tracy_scope: _tracy_scope,
+        }
     }
 
     /// Ends currently open debug & timer scope if any.
@@ -380,27 +381,26 @@ impl GpuProfiler {
     pub fn end_scope<Recorder: ProfilerCommandRecorder>(
         &mut self,
         encoder_or_pass: &mut Recorder,
-        mut open_scope: OpenTimerScope<'_>,
+        open_scope: GpuTimerScope,
     ) {
-        let OpenTimerScope { scope, parent } = &mut open_scope;
-
-        if let Some(scope) = scope.take() {
+        if let Some(start_query) = &open_scope.start_query {
             encoder_or_pass.write_timestamp(
-                &self.active_frame.query_pools[scope.start_query.pool_idx as usize].query_set,
-                scope.start_query.query_idx + 1,
+                &self.active_frame.query_pools[start_query.pool_idx as usize].query_set,
+                start_query.query_idx + 1,
             );
 
             #[cfg(feature = "tracy")]
-            if let Some(ref mut tracy_scope) = scope.tracy_scope {
+            if let Some(ref mut tracy_scope) = open_scope.tracy_scope {
                 tracy_scope.end_zone();
             }
+        }
 
-            if let Some(parent_scope) = parent.take().and_then(|p| p.scope.as_mut()) {
-                parent_scope.closed_nested_scopes.push(scope);
-            } else {
-                self.active_frame.closed_top_level_scopes.push(scope);
-            }
-        };
+        // TODO: make this a channel send.
+        self.active_frame
+            .closed_scope_by_parent_handle
+            .entry(open_scope.parent_handle)
+            .or_default()
+            .push(open_scope);
 
         if self.settings.enable_debug_groups {
             encoder_or_pass.pop_debug_group();
@@ -537,7 +537,7 @@ impl GpuProfiler {
             return None;
         }
 
-        let frame = self.pending_frames.remove(0);
+        let mut frame = self.pending_frames.remove(0);
 
         let results = {
             let read_query_buffers: Vec<wgpu::BufferView> = frame
@@ -547,10 +547,12 @@ impl GpuProfiler {
                 .collect();
 
             let timestamp_to_sec = timestamp_period as f64 / 1000.0 / 1000.0 / 1000.0;
+
             Self::process_timings_recursive(
                 timestamp_to_sec,
                 &read_query_buffers,
-                frame.closed_top_level_scopes,
+                &mut frame.closed_scope_by_parent_handle,
+                None,
             )
         };
 
@@ -570,7 +572,7 @@ const QUERY_SET_MAX_QUERIES: u32 = wgpu::QUERY_SET_MAX_QUERIES;
 /// Returns true if a timestamp should be written to the encoder or pass.
 fn timestamp_write_supported<Recorder: ProfilerCommandRecorder>(
     encoder_or_pass: &mut Recorder,
-    features: &wgpu::Features,
+    features: wgpu::Features,
 ) -> bool {
     let required_feature = if encoder_or_pass.is_pass() {
         wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES
@@ -637,24 +639,30 @@ impl GpuProfiler {
     fn process_timings_recursive(
         timestamp_to_sec: f64,
         resolved_query_buffers: &[wgpu::BufferView],
-        unprocessed_scopes: Vec<UnprocessedTimerScope>,
+        closed_scope_by_parent_handle: &mut HashMap<
+            Option<GpuTimerScopeTreeHandle>,
+            Vec<GpuTimerScope>,
+        >,
+        parent_handle: Option<GpuTimerScopeTreeHandle>,
     ) -> Vec<GpuTimerScopeResult> {
-        unprocessed_scopes
+        let Some(scopes_with_same_parent) = closed_scope_by_parent_handle.remove(&parent_handle)
+        else {
+            return Vec::new();
+        };
+
+        scopes_with_same_parent
             .into_iter()
-            .map(|scope| {
-                let nested_scopes = if scope.closed_nested_scopes.is_empty() {
-                    Vec::new()
-                } else {
-                    Self::process_timings_recursive(
-                        timestamp_to_sec,
-                        resolved_query_buffers,
-                        scope.closed_nested_scopes,
-                    )
+            .filter_map(|scope| {
+                let Some(start_query) = scope.start_query else {
+                    // Inactive scopes don't have any results or nested scopes with results.
+                    // Currently, we drop them from the results completely.
+                    // In the future we could still make them show up since they convey information like label & pid/tid.
+                    return None;
                 };
 
                 // Read timestamp from buffer.
-                let buffer = &resolved_query_buffers[scope.start_query.pool_idx as usize];
-                let offset = (scope.start_query.query_idx * QUERY_SIZE) as usize;
+                let buffer = &resolved_query_buffers[start_query.pool_idx as usize];
+                let offset = (start_query.query_idx * QUERY_SIZE) as usize;
 
                 // By design timestamps for start/end are consecutive.
                 let start_raw = u64::from_le_bytes(
@@ -674,16 +682,23 @@ impl GpuProfiler {
                     tracy_scope.upload_timestamp(start_raw as i64, end_raw as i64);
                 }
 
-                GpuTimerScopeResult {
+                let nested_scopes = Self::process_timings_recursive(
+                    timestamp_to_sec,
+                    resolved_query_buffers,
+                    closed_scope_by_parent_handle,
+                    scope.parent_handle,
+                );
+
+                Some(GpuTimerScopeResult {
                     label: scope.label,
                     time: (start_raw as f64 * timestamp_to_sec)
                         ..(end_raw as f64 * timestamp_to_sec),
                     nested_scopes,
                     pid: scope.pid,
                     tid: scope.tid,
-                }
+                })
             })
-            .collect()
+            .collect::<Vec<_>>()
     }
 }
 
@@ -691,24 +706,6 @@ impl GpuProfiler {
 struct QueryPoolQueryAddress {
     pool_idx: u32,
     query_idx: u32,
-}
-
-struct UnprocessedTimerScope {
-    /// The label assigned to this scope.
-    /// Will be moved into [`GpuTimerScopeResult::label`] once the scope is fully processed.
-    pub label: String,
-
-    /// The process id of the process that opened this scope.
-    pub pid: u32,
-
-    /// The thread id of the thread that opened this scope.
-    pub tid: ThreadId,
-
-    start_query: QueryPoolQueryAddress,
-    closed_nested_scopes: Vec<UnprocessedTimerScope>,
-
-    #[cfg(feature = "tracy")]
-    tracy_scope: Option<tracy_client::GpuSpan>,
 }
 
 /// A pool of queries, consisting of a single queryset & buffer for query results.
@@ -770,7 +767,7 @@ impl QueryPool {
 struct PendingFrame {
     query_pools: Vec<QueryPool>,
     mapped_buffers: std::sync::Arc<std::sync::atomic::AtomicUsize>,
-    closed_top_level_scopes: Vec<UnprocessedTimerScope>,
+    closed_scope_by_parent_handle: HashMap<Option<GpuTimerScopeTreeHandle>, Vec<GpuTimerScope>>,
 }
 
 pub trait ProfilerCommandRecorder {

@@ -1,7 +1,7 @@
 //! Scope types that wrap a `wgpu` encoder/pass and start a scope on creation. In most cases, they
 //! then allow automatically ending the scope on drop.
 
-use crate::{GpuProfiler, OpenTimerScope, ProfilerCommandRecorder};
+use crate::{GpuProfiler, GpuTimerScope, ProfilerCommandRecorder};
 
 /// Scope that takes a (mutable) reference to the encoder/pass.
 ///
@@ -9,7 +9,7 @@ use crate::{GpuProfiler, OpenTimerScope, ProfilerCommandRecorder};
 pub struct Scope<'a, W: ProfilerCommandRecorder> {
     profiler: &'a mut GpuProfiler,
     recorder: &'a mut W,
-    open_scope: OpenTimerScope<'a>,
+    scope: Option<GpuTimerScope>,
 }
 
 /// Scope that takes ownership of the encoder/pass.
@@ -18,7 +18,7 @@ pub struct Scope<'a, W: ProfilerCommandRecorder> {
 pub struct OwningScope<'a, W: ProfilerCommandRecorder> {
     profiler: &'a mut GpuProfiler,
     recorder: W,
-    open_scope: OpenTimerScope<'a>,
+    scope: Option<GpuTimerScope>,
 }
 
 /// Scope that takes ownership of the encoder/pass.
@@ -30,7 +30,7 @@ pub struct OwningScope<'a, W: ProfilerCommandRecorder> {
 pub struct ManualOwningScope<'a, W: ProfilerCommandRecorder> {
     profiler: &'a mut GpuProfiler,
     recorder: W,
-    pub open_scope: OpenTimerScope<'a>,
+    scope: Option<GpuTimerScope>,
 }
 
 impl<'a, W: ProfilerCommandRecorder> Scope<'a, W> {
@@ -43,15 +43,15 @@ impl<'a, W: ProfilerCommandRecorder> Scope<'a, W> {
         recorder: &'a mut W,
         device: &wgpu::Device,
     ) -> Self {
-        let open_scope = profiler.begin_scope(label, recorder, device, None);
+        let scope = profiler.begin_scope(label, recorder, device, None);
         Self {
             profiler,
             recorder,
-            open_scope,
+            scope: Some(scope),
         }
     }
 
-    /// Starts a new profiler scope nested in a previous one. Scope is closed on drop.
+    /// Starts a new profiler scope nested in another scope. Scope is closed on drop.
     #[must_use]
     #[track_caller]
     pub fn start_nested(
@@ -59,87 +59,32 @@ impl<'a, W: ProfilerCommandRecorder> Scope<'a, W> {
         profiler: &'a mut GpuProfiler,
         recorder: &'a mut W,
         device: &wgpu::Device,
-        parent_scope: &'a mut OpenTimerScope<'a>,
+        parent: Option<&GpuTimerScope>,
     ) -> Self {
-        let open_scope = profiler.begin_scope(label, recorder, device, Some(parent_scope));
+        let scope = profiler.begin_scope(label, recorder, device, parent);
         Self {
             profiler,
             recorder,
-            open_scope,
+            scope: Some(scope),
         }
     }
 
     /// Starts a scope nested within this one.
     #[must_use]
     #[track_caller]
-    pub fn scope<'b: 'a>(&'b mut self, label: &str, device: &wgpu::Device) -> Scope<'_, W> {
-        let open_scope =
-            self.profiler
-                .begin_scope(label, self.recorder, device, Some(&mut self.open_scope));
-        Self {
-            profiler: self.profiler,
-            recorder: self.recorder,
-            open_scope,
-        }
-    }
-}
-
-impl<'a, 'b: 'a, W: ProfilerCommandRecorder> OwningScope<'b, W> {
-    /// Starts a new profiler scope. Scope is closed on drop.
-    #[must_use]
-    #[track_caller]
-    pub fn start(
-        label: &str,
-        profiler: &'b mut GpuProfiler,
-        mut recorder: W,
-        device: &wgpu::Device,
-    ) -> Self {
-        let open_scope = profiler.begin_scope(label, &mut recorder, device, None);
-        Self {
-            profiler,
-            recorder,
-            open_scope,
-        }
-    }
-
-    /// Starts a new profiler scope nested in a previous one. Scope is closed on drop.
-    #[must_use]
-    #[track_caller]
-    pub fn start_nested(
-        label: &str,
-        profiler: &'b mut GpuProfiler,
-        mut recorder: W,
-        device: &wgpu::Device,
-        parent_scope: &'b mut OpenTimerScope<'b>,
-    ) -> Self {
-        let open_scope = profiler.begin_scope(label, &mut recorder, device, Some(parent_scope));
-        Self {
-            profiler,
-            recorder,
-            open_scope,
-        }
-    }
-
-    /// Starts a scope nested within this one.
-    #[must_use]
-    #[track_caller]
-    pub fn scope(&'b mut self, label: &str, device: &wgpu::Device) -> Scope<'a, W> {
-        let open_scope = self.profiler.begin_scope(
+    pub fn scope(&mut self, label: &str, device: &wgpu::Device) -> Scope<'_, W> {
+        Scope::start_nested(
             label,
-            &mut self.recorder,
+            self.profiler,
+            self.recorder,
             device,
-            Some(&mut self.open_scope),
-        );
-        Scope {
-            profiler: self.profiler,
-            recorder: &mut self.recorder,
-            open_scope,
-        }
+            self.scope.as_ref(),
+        )
     }
 }
 
-impl<'a, W: ProfilerCommandRecorder> ManualOwningScope<'a, W> {
-    /// Starts a new profiler scope. Scope is NOT closed on drop and needs to be closed manually with [`ManualOwningScope::end_scope`]
+impl<'a, W: ProfilerCommandRecorder> OwningScope<'a, W> {
+    /// Starts a new profiler scope. Scope is closed on drop.
     #[must_use]
     #[track_caller]
     pub fn start(
@@ -148,15 +93,66 @@ impl<'a, W: ProfilerCommandRecorder> ManualOwningScope<'a, W> {
         mut recorder: W,
         device: &wgpu::Device,
     ) -> Self {
-        let open_scope = profiler.begin_scope(label, &mut recorder, device, None);
+        let scope = profiler.begin_scope(label, &mut recorder, device, None);
         Self {
             profiler,
             recorder,
-            open_scope,
+            scope: Some(scope),
         }
     }
 
-    /// Starts a new profiler scope nested in a previous one.
+    /// Starts a new profiler scope nested in another scope. Scope is closed on drop.
+    #[must_use]
+    #[track_caller]
+    pub fn start_nested(
+        label: &str,
+        profiler: &'a mut GpuProfiler,
+        mut recorder: W,
+        device: &wgpu::Device,
+        parent: Option<&GpuTimerScope>,
+    ) -> Self {
+        let scope = profiler.begin_scope(label, &mut recorder, device, parent);
+        Self {
+            profiler,
+            recorder,
+            scope: Some(scope),
+        }
+    }
+
+    /// Starts a scope nested within this one.
+    #[must_use]
+    #[track_caller]
+    pub fn scope(&mut self, label: &str, device: &wgpu::Device) -> Scope<'_, W> {
+        Scope::start_nested(
+            label,
+            self.profiler,
+            &mut self.recorder,
+            device,
+            self.scope.as_ref(),
+        )
+    }
+}
+
+impl<'a, W: ProfilerCommandRecorder> ManualOwningScope<'a, W> {
+    /// Starts a new profiler scope.
+    /// Scope is NOT closed on drop and needs to be closed manually with [`ManualOwningScope::end_scope`]
+    #[must_use]
+    #[track_caller]
+    pub fn start(
+        label: &str,
+        profiler: &'a mut GpuProfiler,
+        mut recorder: W,
+        device: &wgpu::Device,
+    ) -> Self {
+        let scope = profiler.begin_scope(label, &mut recorder, device, None);
+        Self {
+            profiler,
+            recorder,
+            scope: Some(scope),
+        }
+    }
+
+    /// Starts a new profiler scope nested in another one.
     /// Scope is NOT closed on drop and needs to be closed manually with [`ManualOwningScope::end_scope`]
     #[must_use]
     #[track_caller]
@@ -165,137 +161,147 @@ impl<'a, W: ProfilerCommandRecorder> ManualOwningScope<'a, W> {
         profiler: &'a mut GpuProfiler,
         mut recorder: W,
         device: &wgpu::Device,
-        parent_scope: &'a mut OpenTimerScope<'a>,
+        parent: Option<&GpuTimerScope>,
     ) -> Self {
-        let open_scope = profiler.begin_scope(label, &mut recorder, device, Some(parent_scope));
+        let scope = profiler.begin_scope(label, &mut recorder, device, parent);
         Self {
             profiler,
             recorder,
-            open_scope,
+            scope: Some(scope),
         }
     }
 
     /// Starts a scope nested within this one
     #[must_use]
     #[track_caller]
-    pub fn scope(&'a mut self, label: &str, device: &wgpu::Device) -> Scope<'_, W> {
-        let open_scope = self.profiler.begin_scope(
-            label,
-            &mut self.recorder,
-            device,
-            Some(&mut self.open_scope),
-        );
-        Scope {
-            profiler: self.profiler,
-            recorder: &mut self.recorder,
-            open_scope,
-        }
+    pub fn scope(&mut self, label: &str, device: &wgpu::Device) -> Scope<'_, W> {
+        Scope::start(label, self.profiler, &mut self.recorder, device)
     }
 
     /// Ends the scope allowing the extraction of the owned [`ProfilerCommandRecorder`]
     /// and the mutable reference to the [`GpuProfiler`].
     #[track_caller]
-    pub fn end_scope(self) -> (W, &'a mut GpuProfiler) {
-        let ManualOwningScope {
-            profiler,
-            mut recorder,
-            open_scope,
-        } = self;
-
-        profiler.end_scope(&mut recorder, open_scope);
-        (recorder, profiler)
+    pub fn end_scope(mut self) -> (W, &'a mut GpuProfiler) {
+        // Can't fail since creation implies begin_scope.
+        self.profiler
+            .end_scope(&mut self.recorder, self.scope.take().unwrap());
+        (self.recorder, self.profiler)
     }
 }
 
 impl<'a> Scope<'a, wgpu::CommandEncoder> {
     /// Start a render pass wrapped in a [`OwningScope`].
     #[track_caller]
-    pub fn scoped_render_pass<'b: 'a>(
+    pub fn scoped_render_pass<'b>(
         &'b mut self,
         label: &str,
         device: &wgpu::Device,
         pass_descriptor: &wgpu::RenderPassDescriptor<'b, '_>,
-    ) -> OwningScope<'_, wgpu::RenderPass<'b>> {
+    ) -> OwningScope<'b, wgpu::RenderPass<'b>> {
         let render_pass = self.recorder.begin_render_pass(pass_descriptor);
         OwningScope::start_nested(
             label,
             self.profiler,
             render_pass,
             device,
-            &mut self.open_scope,
+            self.scope.as_ref(),
         )
     }
 
     /// Start a compute pass wrapped in a [`OwningScope`].
     #[track_caller]
-    pub fn scoped_compute_pass<'b: 'a>(
-        &'b mut self,
+    pub fn scoped_compute_pass(
+        &mut self,
         label: &str,
         device: &wgpu::Device,
         pass_descriptor: &wgpu::ComputePassDescriptor<'_>,
-    ) -> OwningScope<'_, wgpu::ComputePass> {
+    ) -> OwningScope<wgpu::ComputePass> {
         let compute_pass = self.recorder.begin_compute_pass(pass_descriptor);
         OwningScope::start_nested(
             label,
             self.profiler,
             compute_pass,
             device,
-            &mut self.open_scope,
+            self.scope.as_ref(),
         )
     }
 }
 
-// impl<'a> OwningScope<'a, wgpu::CommandEncoder> {
-//     /// Start a render pass wrapped in an [`OwningScope`].
-//     #[track_caller]
-//     pub fn scoped_render_pass<'b: 'a>(
-//         &'b mut self,
-//         label: &str,
-//         device: &wgpu::Device,
-//         pass_descriptor: &wgpu::RenderPassDescriptor<'b, '_>,
-//     ) -> OwningScope<'b, wgpu::RenderPass<'b>> {
-//         let render_pass = self.recorder.begin_render_pass(pass_descriptor);
-//         OwningScope::start(label, self.profiler, render_pass, device)
-//     }
+impl<'a> OwningScope<'a, wgpu::CommandEncoder> {
+    /// Start a render pass wrapped in an [`OwningScope`].
+    #[track_caller]
+    pub fn scoped_render_pass<'b>(
+        &'b mut self,
+        label: &str,
+        device: &wgpu::Device,
+        pass_descriptor: &wgpu::RenderPassDescriptor<'b, '_>,
+    ) -> OwningScope<'b, wgpu::RenderPass<'b>> {
+        let render_pass = self.recorder.begin_render_pass(pass_descriptor);
+        OwningScope::start_nested(
+            label,
+            self.profiler,
+            render_pass,
+            device,
+            self.scope.as_ref(),
+        )
+    }
 
-//     /// Start a compute pass wrapped in a [`OwningScope`].
-//     #[track_caller]
-//     pub fn scoped_compute_pass<'b: 'a>(
-//         &mut self,
-//         label: &str,
-//         device: &wgpu::Device,
-//         pass_descriptor: &wgpu::ComputePassDescriptor<'_>,
-//     ) -> OwningScope<'b, wgpu::ComputePass> {
-//         let compute_pass = self.recorder.begin_compute_pass(pass_descriptor);
-//         OwningScope::start(label, self.profiler, compute_pass, device)
-//     }
-// }
+    /// Start a compute pass wrapped in a [`OwningScope`].
+    #[track_caller]
+    pub fn scoped_compute_pass(
+        &mut self,
+        label: &str,
+        device: &wgpu::Device,
+        pass_descriptor: &wgpu::ComputePassDescriptor<'_>,
+    ) -> OwningScope<wgpu::ComputePass> {
+        let compute_pass = self.recorder.begin_compute_pass(pass_descriptor);
+        OwningScope::start_nested(
+            label,
+            self.profiler,
+            compute_pass,
+            device,
+            self.scope.as_ref(),
+        )
+    }
+}
 
-// impl<'a> ManualOwningScope<'a, wgpu::CommandEncoder> {
-//     /// Start a render pass wrapped in an [`OwningScope`].
-//     #[track_caller]
-//     pub fn scoped_render_pass<'b: 'a>(
-//         &'b mut self,
-//         label: &str,
-//         device: &wgpu::Device,
-//         pass_descriptor: &wgpu::RenderPassDescriptor<'b, '_>,
-//     ) -> OwningScope<'b, wgpu::RenderPass<'b>> {
-//         let render_pass = self.recorder.begin_render_pass(pass_descriptor);
-//         OwningScope::start(label, self.profiler, render_pass, device)
-//     }
+impl<'a> ManualOwningScope<'a, wgpu::CommandEncoder> {
+    /// Start a render pass wrapped in an [`OwningScope`].
+    #[track_caller]
+    pub fn scoped_render_pass<'b>(
+        &'b mut self,
+        label: &str,
+        device: &wgpu::Device,
+        pass_descriptor: &wgpu::RenderPassDescriptor<'b, '_>,
+    ) -> OwningScope<'b, wgpu::RenderPass<'b>> {
+        let render_pass = self.recorder.begin_render_pass(pass_descriptor);
+        OwningScope::start_nested(
+            label,
+            self.profiler,
+            render_pass,
+            device,
+            self.scope.as_ref(),
+        )
+    }
 
-//     /// Start a compute pass wrapped in an [`OwningScope`].
-//     #[track_caller]
-//     pub fn scoped_compute_pass<'b: 'a>(
-//         &mut self,
-//         label: &str,
-//         device: &wgpu::Device,
-//         pass_descriptor: &wgpu::ComputePassDescriptor<'_>,
-//     ) -> OwningScope<'b, wgpu::ComputePass> {
-//         let compute_pass = self.recorder.begin_compute_pass(pass_descriptor);
-//         OwningScope::start(label, self.profiler, compute_pass, device)
-//     }
-// }
+    /// Start a compute pass wrapped in an [`OwningScope`].
+    #[track_caller]
+    pub fn scoped_compute_pass(
+        &mut self,
+        label: &str,
+        device: &wgpu::Device,
+        pass_descriptor: &wgpu::ComputePassDescriptor<'_>,
+    ) -> OwningScope<wgpu::ComputePass> {
+        let compute_pass = self.recorder.begin_compute_pass(pass_descriptor);
+        OwningScope::start_nested(
+            label,
+            self.profiler,
+            compute_pass,
+            device,
+            self.scope.as_ref(),
+        )
+    }
+}
 
 // Scope
 impl<'a, W: ProfilerCommandRecorder> std::ops::Deref for Scope<'a, W> {
@@ -314,8 +320,9 @@ impl<'a, W: ProfilerCommandRecorder> std::ops::DerefMut for Scope<'a, W> {
 
 impl<'a, W: ProfilerCommandRecorder> Drop for Scope<'a, W> {
     fn drop(&mut self) {
+        // Creation implies begin_scope, so this can't fail.
         self.profiler
-            .end_scope(self.recorder, self.open_scope.take());
+            .end_scope(self.recorder, self.scope.take().unwrap());
     }
 }
 
@@ -336,8 +343,9 @@ impl<'a, W: ProfilerCommandRecorder> std::ops::DerefMut for OwningScope<'a, W> {
 
 impl<'a, W: ProfilerCommandRecorder> Drop for OwningScope<'a, W> {
     fn drop(&mut self) {
+        // Creation implies begin_scope, so this can't fail.
         self.profiler
-            .end_scope(&mut self.recorder, self.open_scope.take());
+            .end_scope(&mut self.recorder, self.scope.take().unwrap());
     }
 }
 

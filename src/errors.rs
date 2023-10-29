@@ -53,7 +53,7 @@ pub enum SettingsError {
 #[derive(thiserror::Error, Debug, PartialEq, Eq)]
 pub enum EndFrameError {
     #[error("All profiling scopes need to be closed before ending a frame. There were still {0} open scopes.")]
-    UnclosedScopes(usize),
+    UnclosedScopes(u32),
 
     #[error(
         "Not all queries were resolved before ending a frame.\n
