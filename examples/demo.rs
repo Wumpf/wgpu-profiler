@@ -174,12 +174,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
                 {
-                    let mut scope = wgpu_profiler::Scope::start(
-                        "rendering",
-                        &mut profiler,
-                        &mut encoder,
-                        &device,
-                    );
+                    let mut scope =
+                        wgpu_profiler::Scope::start("rendering", &profiler, &mut encoder, &device);
                     profiling::scope!("Rendering");
 
                     // TODO: this usage pattern doesn't make all that much sense.
@@ -212,7 +208,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 
                     // You can profile using a macro.
                     // TODO:
-                    // wgpu_profiler!("fractal 0", &mut profiler, &mut rpass, &device, {
+                    // wgpu_profiler!("fractal 0", &profiler, &mut rpass, &device, {
                     //     rpass.set_pipeline(&render_pipeline);
                     //     rpass.draw(0..6, 0..1);
                     // });
@@ -236,7 +232,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     // {
                     //     let mut scoped_pass = wgpu_profiler::OwningScope::start(
                     //         "fractal 3",
-                    //         &mut profiler,
+                    //         &profiler,
                     //         rpass,
                     //         &device,
                     //     );

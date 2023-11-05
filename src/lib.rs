@@ -98,7 +98,7 @@ use std::{
     thread::ThreadId,
 };
 
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 
 /// The result of a gpu timer scope.
 #[derive(Debug, Clone)]
@@ -256,7 +256,7 @@ impl GpuProfiler {
             active_frame: ActiveFrame {
                 query_pools: RwLock::new(PendingFramePools::default()),
                 closed_scope_sender,
-                closed_scope_receiver,
+                closed_scope_receiver: Mutex::new(closed_scope_receiver),
             },
 
             num_open_scopes: AtomicU32::new(0),
@@ -436,7 +436,7 @@ impl GpuProfiler {
             // mostly to be on the safe side - it happened inside a lock which gives it release semantics anyways
             // but the concern is that if we don't acquire here, we may miss on other side prior effects of the query begin.
             let num_used_queries = query_pool.num_used_queries.load(Ordering::Acquire);
-            let num_resolved_queries = query_pool.num_resolved_queries.get();
+            let num_resolved_queries = query_pool.num_resolved_queries.load(Ordering::Acquire);
 
             if num_resolved_queries == num_used_queries {
                 continue;
@@ -450,7 +450,9 @@ impl GpuProfiler {
                 &query_pool.resolve_buffer,
                 (num_resolved_queries * QUERY_SIZE) as u64,
             );
-            query_pool.num_resolved_queries.set(num_used_queries);
+            query_pool
+                .num_resolved_queries
+                .store(num_used_queries, Ordering::Release);
 
             encoder.copy_buffer_to_buffer(
                 &query_pool.resolve_buffer,
@@ -481,7 +483,7 @@ impl GpuProfiler {
             mapped_buffers: Arc::new(AtomicU32::new(0)),
         };
 
-        for closed_scope in self.active_frame.closed_scope_receiver.try_iter() {
+        for closed_scope in self.active_frame.closed_scope_receiver.get_mut().try_iter() {
             new_pending_frame
                 .closed_scope_by_parent_handle
                 .entry(closed_scope.parent_handle)
@@ -497,7 +499,8 @@ impl GpuProfiler {
             .query_pools
             .iter()
             .map(|pool| {
-                pool.num_used_queries.load(Ordering::Relaxed) - pool.num_resolved_queries.get()
+                pool.num_used_queries.load(Ordering::Relaxed)
+                    - pool.num_resolved_queries.load(Ordering::Relaxed)
             })
             .sum();
         if num_unresolved_queries != 0 {
@@ -623,7 +626,7 @@ impl GpuProfiler {
         for pool in discarded_pools.drain(..) {
             // If the pool is truly unused now, it's ref count should be 1!
             // If we use it anywhere else we have an implementation bug.
-            let mut pool = Arc::try_unwrap(pool).expect("Pool still in use");
+            let mut pool = Arc::into_inner(pool).expect("Pool still in use");
             pool.reset();
 
             // If a pool was less than half of the size of the max frame, then we don't keep it.
@@ -824,7 +827,7 @@ struct QueryPool {
 
     capacity: u32,
     num_used_queries: AtomicU32,
-    num_resolved_queries: Cell<u32>,
+    num_resolved_queries: AtomicU32,
 }
 
 impl QueryPool {
@@ -854,13 +857,13 @@ impl QueryPool {
 
             capacity,
             num_used_queries: AtomicU32::new(0),
-            num_resolved_queries: Cell::new(0),
+            num_resolved_queries: AtomicU32::new(0),
         }
     }
 
     fn reset(&mut self) {
         self.num_used_queries = AtomicU32::new(0);
-        self.num_resolved_queries.set(0);
+        self.num_resolved_queries = AtomicU32::new(0);
         self.read_buffer.unmap();
     }
 }
@@ -883,8 +886,10 @@ struct ActiveFrame {
     /// Note that channel is still overkill for what we want here:
     /// We're in a multi producer situation, *but* the single consumer is known to be only
     /// active in a mut context, i.e. while we're consuming we know that we're not producing.
+    /// We have to wrap it in a Mutex because the channel is not Sync, but we actually never lock it
+    /// since we only ever access it in a `mut` context.
     closed_scope_sender: std::sync::mpsc::Sender<GpuTimerScope>,
-    closed_scope_receiver: std::sync::mpsc::Receiver<GpuTimerScope>,
+    closed_scope_receiver: Mutex<std::sync::mpsc::Receiver<GpuTimerScope>>,
 }
 
 struct PendingFrame {

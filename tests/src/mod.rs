@@ -38,7 +38,15 @@ enum Requires {
 }
 
 #[derive(Debug)]
-struct ExpectedScope(&'static str, Requires, &'static [ExpectedScope]);
+struct ExpectedScope(String, Requires, Vec<ExpectedScope>);
+
+fn expected_scope(
+    label: impl Into<String>,
+    requires: Requires,
+    children: impl Into<Vec<ExpectedScope>>,
+) -> ExpectedScope {
+    ExpectedScope(label.into(), requires, children.into())
+}
 
 fn validate_results(
     features: wgpu::Features,
@@ -62,6 +70,37 @@ fn validate_results(
     );
     for (result, expected) in result.iter().zip(expected.iter()) {
         assert_eq!(result.label, expected.0);
+        validate_results(features, &result.nested_scopes, &expected.2);
+    }
+}
+
+fn validate_results_unordered(
+    features: wgpu::Features,
+    result: &[wgpu_profiler::GpuTimerScopeResult],
+    expected: &[ExpectedScope],
+) {
+    let expected = expected
+        .iter()
+        .filter(|expected| match expected.1 {
+            Requires::Timestamps => features.contains(wgpu::Features::TIMESTAMP_QUERY),
+            Requires::TimestampsInPasses => {
+                features.contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES)
+            }
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        result.len(),
+        expected.len(),
+        "result: {result:?}\nexpected: {expected:?}"
+    );
+
+    let mut expected_labels = std::collections::HashSet::<String>::from_iter(
+        expected.iter().map(|expected| expected.0.clone()),
+    );
+
+    for (result, expected) in result.iter().zip(expected.iter()) {
+        assert!(expected_labels.remove(&result.label));
         validate_results(features, &result.nested_scopes, &expected.2);
     }
 }

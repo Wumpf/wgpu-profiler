@@ -1,6 +1,6 @@
 use wgpu_profiler::{GpuProfiler, GpuProfilerSettings};
 
-use crate::src::{validate_results, ExpectedScope, Requires};
+use crate::src::{expected_scope, validate_results, Requires};
 
 use super::create_device;
 
@@ -93,27 +93,27 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
         device.features(),
         &frame,
         &[
-            ExpectedScope(
+            expected_scope(
                 "e0_s0",
                 Requires::Timestamps,
-                &[
-                    ExpectedScope("e0_s0_c0", Requires::TimestampsInPasses, &[]),
-                    ExpectedScope(
+                [
+                    expected_scope("e0_s0_c0", Requires::TimestampsInPasses, []),
+                    expected_scope(
                         "e0_s0_c1",
                         Requires::TimestampsInPasses,
-                        &[
-                            ExpectedScope("e0_s0_c1_s0", Requires::TimestampsInPasses, &[]),
-                            ExpectedScope(
+                        [
+                            expected_scope("e0_s0_c1_s0", Requires::TimestampsInPasses, []),
+                            expected_scope(
                                 "e0_s0_c1_s1",
                                 Requires::TimestampsInPasses,
-                                &[ExpectedScope(
+                                [expected_scope(
                                     "e0_s0_c1_s1_s0",
                                     Requires::TimestampsInPasses,
-                                    &[
-                                        ExpectedScope(
+                                    [
+                                        expected_scope(
                                             "e0_s0_c1_s1_s0_s0",
                                             Requires::TimestampsInPasses,
-                                            &[],
+                                            [],
                                         ), //
                                     ],
                                 )],
@@ -122,22 +122,22 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
                     ),
                 ],
             ),
-            ExpectedScope(
+            expected_scope(
                 "e1_s0",
                 Requires::Timestamps,
-                &[
-                    ExpectedScope("e1_s0_s0", Requires::Timestamps, &[]),
-                    ExpectedScope("e1_s0_s1", Requires::Timestamps, &[]),
-                    ExpectedScope(
+                [
+                    expected_scope("e1_s0_s0", Requires::Timestamps, []),
+                    expected_scope("e1_s0_s1", Requires::Timestamps, []),
+                    expected_scope(
                         "e1_s0_s2",
                         Requires::Timestamps,
-                        &[
-                            ExpectedScope("e1_s0_s2_s0", Requires::Timestamps, &[]), //
+                        [
+                            expected_scope("e1_s0_s2_s0", Requires::Timestamps, []), //
                         ],
                     ),
                 ],
             ),
-            ExpectedScope("e2_s0", Requires::Timestamps, &[]),
+            expected_scope("e2_s0", Requires::Timestamps, []),
         ],
     );
 }
