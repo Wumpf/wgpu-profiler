@@ -1,4 +1,4 @@
-use wgpu_profiler::{scope::Scope, GpuProfiler, GpuProfilerSettings, GpuTimerScopeResult};
+use wgpu_profiler::{GpuProfiler, GpuProfilerSettings, GpuTimerScopeResult};
 
 mod utils;
 
@@ -45,7 +45,8 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
     let mut encoder2 = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
 
     {
-        let mut outer_scope = Scope::start("e0_s0", &mut profiler, &mut encoder0, device);
+        let mut outer_scope =
+            wgpu_profiler::Scope::start("e0_s0", &mut profiler, &mut encoder0, device);
         {
             drop(outer_scope.scoped_compute_pass(
                 "e0_s0_c0",
@@ -60,18 +61,18 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
                 );
                 {
                     drop(inner_scope.scope("e0_s0_c1_s0", device));
-                    // let mut innermost_scope = inner_scope.scope("e0_s0_c1_s1", device);
-                    // {
-                    //     let mut scope = innermost_scope.scope("e0_s0_c1_s1_s0", device);
-                    //     drop(scope.scope("e0_s0_c1_s1_s0_s0", device));
-                    // }
+                    let mut innermost_scope = inner_scope.scope("e0_s0_c1_s1", device);
+                    {
+                        let mut scope = innermost_scope.scope("e0_s0_c1_s1_s0", device);
+                        drop(scope.scope("e0_s0_c1_s1_s0_s0", device));
+                    }
                 }
             }
         }
     }
     // Bunch of interleaved scopes on an encoder.
     {
-        let mut scope = Scope::start("e1_s0", &mut profiler, &mut encoder1, device);
+        let mut scope = wgpu_profiler::Scope::start("e1_s0", &mut profiler, &mut encoder1, device);
         {
             drop(scope.scope("e1_s0_s0", device));
             drop(scope.scope("e1_s0_s1", device));
@@ -81,7 +82,12 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
             }
         }
     }
-    drop(Scope::start("e2_s0", &mut profiler, &mut encoder2, device));
+    drop(wgpu_profiler::Scope::start(
+        "e2_s0",
+        &mut profiler,
+        &mut encoder2,
+        device,
+    ));
     {
         // Another scope, but with the profiler disabled which should be possible on the fly.
         profiler
@@ -90,7 +96,7 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
                 ..Default::default()
             })
             .unwrap();
-        let mut scope = Scope::start("e2_s1", &mut profiler, &mut encoder0, device);
+        let mut scope = wgpu_profiler::Scope::start("e2_s1", &mut profiler, &mut encoder0, device);
         {
             let mut scope = scope.scoped_compute_pass(
                 "e2_s1_c1",
@@ -111,6 +117,9 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
     let frame = profiler
         .process_finished_frame(queue.get_timestamp_period())
         .unwrap();
+
+    // Print entire tree. Useful for debugging the test if it fails!
+    println!("{:#?}", frame);
 
     // Check if the frame gives us the expected nesting of timer scopes.
     validate_results(

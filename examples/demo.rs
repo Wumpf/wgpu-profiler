@@ -173,63 +173,76 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 let mut encoder =
                     device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
-                wgpu_profiler!("rendering", &mut profiler, &mut encoder, &device, {
+                {
+                    let mut scope = wgpu_profiler::Scope::start(
+                        "rendering",
+                        &mut profiler,
+                        &mut encoder,
+                        &device,
+                    );
                     profiling::scope!("Rendering");
 
-                    let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: None,
-                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: &frame_view,
-                            resolve_target: None,
-                            ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(wgpu::Color {
-                                    r: 100.0 / 255.0,
-                                    g: 149.0 / 255.0,
-                                    b: 237.0 / 255.0,
-                                    a: 1.0,
-                                }),
-                                store: wgpu::StoreOp::Store,
-                            },
-                        })],
-                        depth_stencil_attachment: None,
-                        occlusion_query_set: None,
-                        timestamp_writes: None,
-                    });
+                    // TODO: this usage pattern doesn't make all that much sense.
+
+                    let mut rpass = scope.scoped_render_pass(
+                        "render pass",
+                        &device,
+                        &wgpu::RenderPassDescriptor {
+                            label: None,
+                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                view: &frame_view,
+                                resolve_target: None,
+                                ops: wgpu::Operations {
+                                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                                        r: 100.0 / 255.0,
+                                        g: 149.0 / 255.0,
+                                        b: 237.0 / 255.0,
+                                        a: 1.0,
+                                    }),
+                                    store: wgpu::StoreOp::Store,
+                                },
+                            })],
+                            depth_stencil_attachment: None,
+                            occlusion_query_set: None,
+                            timestamp_writes: None,
+                        },
+                    );
 
                     // Obviously all the following draw calls could be collapsed, but they are separated to illustrate the different profiler scopes.
 
                     // You can profile using a macro.
-                    wgpu_profiler!("fractal 0", &mut profiler, &mut rpass, &device, {
-                        rpass.set_pipeline(&render_pipeline);
-                        rpass.draw(0..6, 0..1);
-                    });
+                    // TODO:
+                    // wgpu_profiler!("fractal 0", &mut profiler, &mut rpass, &device, {
+                    //     rpass.set_pipeline(&render_pipeline);
+                    //     rpass.draw(0..6, 0..1);
+                    // });
                     // ... or a scope object
                     {
-                        let mut rpass = wgpu_profiler::scope::Scope::start(
-                            "fractal 1",
-                            &mut profiler,
-                            &mut rpass,
-                            &device,
-                        );
+                        let mut rpass = rpass.scope("fractal 1", &device);
                         rpass.draw(0..6, 1..2);
                     }
-                    // ... or simply manually
-                    {
-                        profiler.begin_scope("fractal 2", &mut rpass, &device);
-                        rpass.draw(0..6, 2..3);
-                        profiler.end_scope(&mut rpass).unwrap();
-                    }
-                    // ... or a scope object that takes ownership of the pass
-                    {
-                        let mut scoped_pass = wgpu_profiler::scope::OwningScope::start(
-                            "fractal 3",
-                            &mut profiler,
-                            rpass,
-                            &device,
-                        );
-                        scoped_pass.draw(0..6, 3..4);
-                    }
-                });
+                    // // ... or simply manually
+                    // {
+                    //     let scope = profiler.begin_scope(
+                    //         "fractal 2",
+                    //         &mut *rpass,
+                    //         &device,
+                    //         rpass.profiler_scope(),
+                    //     );
+                    //     rpass.draw(0..6, 2..3);
+                    //     profiler.end_scope(&mut rpass, scope);
+                    // }
+                    // // ... or a scope object that takes ownership of the pass
+                    // {
+                    //     let mut scoped_pass = wgpu_profiler::OwningScope::start(
+                    //         "fractal 3",
+                    //         &mut profiler,
+                    //         rpass,
+                    //         &device,
+                    //     );
+                    //     scoped_pass.draw(0..6, 3..4);
+                    // }
+                }
 
                 // Resolves any queries that might be in flight.
                 profiler.resolve_queries(&mut encoder);

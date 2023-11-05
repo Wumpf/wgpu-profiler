@@ -21,17 +21,14 @@ Simple profiler scopes for wgpu using timer queries
 
 Create a new profiler object:
 ```rust
-use wgpu_profiler::{wgpu_profiler, GpuProfiler};
+use wgpu_profiler::{wgpu_profiler, GpuProfiler, GpuProfilerSettings};
 // ...
-let mut profiler = GpuProfiler::new(&adapter, &device, &queue, 4); // buffer up to 4 frames
+let mut profiler = GpuProfiler::new(GpuProfilerSettings::default());
 ```
 
-Using scopes is easiest with the macro:
-```rust
-wgpu_profiler!("name of your scope", &mut profiler, &mut encoder, &device, {
-  // wgpu commands go here
-});
-```
+Using scopes is easiest with TODO:
+TODO:
+
 Note that `GpuProfiler` reads the device features - if your wgpu device doesn't have `wgpu::Features::TIMESTAMP_QUERY` enabled, it will automatically not attempt to emit any timer queries.
 Similarly, if `wgpu::Features::WRITE_TIMESTAMP_INSIDE_PASSES` is not present, no queries will be issued from inside passes.
 
@@ -74,6 +71,13 @@ for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
 
 ## Changelog
+* unreleased
+  * ⚠️ Includes many major breaking changes! ⚠️
+  * `GpuProfiler` can now be with several command buffers interleaved or in parallel!
+  * `GpuProfiler::begin_scope` returns a scope and `GpuProfiler::end_scope` consumes it again
+  * `Scope`/`ManualScope`/`OwningScope` are now all top-level in the `gpu_profiler` module
+  * nesting of profiling scopes is no longer done automatically: `GpuProfiler::begin_scope` now takes an optional reference to a parent scope
+  * removed profiling macro (doesn't work well with the new nesting model)
 * 0.15
   * update to wgpu 0.18, by @Zoxc in [#50](https://github.com/Wumpf/wgpu-profiler/pull/50)
   * sample & doc fixes, by @waywardmonkeys in [#41](https://github.com/Wumpf/wgpu-profiler/pull/41), [#44](https://github.com/Wumpf/wgpu-profiler/pull/44)

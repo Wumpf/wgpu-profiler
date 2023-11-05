@@ -33,10 +33,11 @@ let mut profiler = GpuProfiler::new(GpuProfilerSettings::default()).unwrap();
 // ...
 
 # let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-// Using scopes is easiest with the macro:
-wgpu_profiler!("name of your scope", &mut profiler, &mut encoder, &device, {
-  // wgpu commands go here
-});
+// Using scopes is easiest with the wgpu_profiler::Scope struct:
+{
+    wgpu_profiler::Scope::start("name of your scope", &mut profiler, &mut encoder, &device);
+    // wgpu commands go here
+}
 
 // Wgpu-profiler needs to insert buffer copy commands.
 profiler.resolve_queries(&mut encoder);
@@ -85,12 +86,12 @@ use std::{
 
 pub mod chrometrace;
 mod errors;
-pub mod macros;
-pub mod scope;
+mod scope;
 #[cfg(feature = "tracy")]
-pub mod tracy;
+mod tracy;
 
 pub use errors::{CreationError, EndFrameError, SettingsError};
+pub use scope::{ManualOwningScope, OwningScope, Scope};
 
 /// The result of a gpu timer scope.
 #[derive(Debug, Clone)]
@@ -140,7 +141,7 @@ pub struct GpuTimerScope {
     handle: GpuTimerScopeTreeHandle,
 
     /// Which if any scope this is a child of.
-    parent_handle: Option<GpuTimerScopeTreeHandle>,
+    parent_handle: Option<GpuTimerScopeTreeHandle>, // TODO: move out.
 
     #[cfg(feature = "tracy")]
     tracy_scope: Option<tracy_client::GpuSpan>,
@@ -653,7 +654,16 @@ impl GpuProfiler {
         scopes_with_same_parent
             .into_iter()
             .filter_map(|scope| {
-                let Some(start_query) = scope.start_query else {
+                let GpuTimerScope {
+                    label,
+                    pid,
+                    tid,
+                    start_query,
+                    handle,
+                    parent_handle: _,
+                } = scope;
+
+                let Some(start_query) = start_query else {
                     // Inactive scopes don't have any results or nested scopes with results.
                     // Currently, we drop them from the results completely.
                     // In the future we could still make them show up since they convey information like label & pid/tid.
@@ -686,16 +696,16 @@ impl GpuProfiler {
                     timestamp_to_sec,
                     resolved_query_buffers,
                     closed_scope_by_parent_handle,
-                    scope.parent_handle,
+                    Some(handle),
                 );
 
                 Some(GpuTimerScopeResult {
-                    label: scope.label,
+                    label,
                     time: (start_raw as f64 * timestamp_to_sec)
                         ..(end_raw as f64 * timestamp_to_sec),
                     nested_scopes,
-                    pid: scope.pid,
-                    tid: scope.tid,
+                    pid,
+                    tid,
                 })
             })
             .collect::<Vec<_>>()

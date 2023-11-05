@@ -33,6 +33,11 @@ pub struct ManualOwningScope<'a, W: ProfilerCommandRecorder> {
     scope: Option<GpuTimerScope>,
 }
 
+// TODO: this might be useful!
+// trait ScopeWrapper {
+//     pub fn profiler_scope(&self) -> Option<&GpuTimerScope>;
+// }
+
 impl<'a, W: ProfilerCommandRecorder> Scope<'a, W> {
     /// Starts a new profiler scope. Scope is closed on drop.
     #[must_use]
@@ -80,6 +85,14 @@ impl<'a, W: ProfilerCommandRecorder> Scope<'a, W> {
             device,
             self.scope.as_ref(),
         )
+    }
+
+    /// Return the open profiler scope.
+    ///
+    /// This is useful for manually creating nested scopes
+    /// It's guaranteed to be `Some` unless the scope has already been dropped.
+    pub fn profiler_scope(&self) -> Option<&GpuTimerScope> {
+        self.scope.as_ref()
     }
 }
 
