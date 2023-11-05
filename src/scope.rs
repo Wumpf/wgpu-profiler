@@ -7,7 +7,7 @@ use crate::{GpuProfiler, GpuTimerScope, ProfilerCommandRecorder};
 ///
 /// Calls [`GpuProfiler::end_scope()`] on drop.
 pub struct Scope<'a, W: ProfilerCommandRecorder> {
-    profiler: &'a mut GpuProfiler,
+    profiler: &'a GpuProfiler,
     recorder: &'a mut W,
     scope: Option<GpuTimerScope>,
 }
@@ -16,7 +16,7 @@ pub struct Scope<'a, W: ProfilerCommandRecorder> {
 ///
 /// Calls [`GpuProfiler::end_scope()`] on drop.
 pub struct OwningScope<'a, W: ProfilerCommandRecorder> {
-    profiler: &'a mut GpuProfiler,
+    profiler: &'a GpuProfiler,
     recorder: W,
     scope: Option<GpuTimerScope>,
 }
@@ -28,7 +28,7 @@ pub struct OwningScope<'a, W: ProfilerCommandRecorder> {
 /// This is useful when the owned value needs to be recovered after the end of the scope.
 /// In particular, to submit a [`wgpu::CommandEncoder`] to a queue, ownership of the encoder is necessary.
 pub struct ManualOwningScope<'a, W: ProfilerCommandRecorder> {
-    profiler: &'a mut GpuProfiler,
+    profiler: &'a GpuProfiler,
     recorder: W,
     scope: Option<GpuTimerScope>,
 }
@@ -44,7 +44,7 @@ impl<'a, W: ProfilerCommandRecorder> Scope<'a, W> {
     #[track_caller]
     pub fn start(
         label: &str,
-        profiler: &'a mut GpuProfiler,
+        profiler: &'a GpuProfiler,
         recorder: &'a mut W,
         device: &wgpu::Device,
     ) -> Self {
@@ -61,7 +61,7 @@ impl<'a, W: ProfilerCommandRecorder> Scope<'a, W> {
     #[track_caller]
     pub fn start_nested(
         label: &str,
-        profiler: &'a mut GpuProfiler,
+        profiler: &'a GpuProfiler,
         recorder: &'a mut W,
         device: &wgpu::Device,
         parent: Option<&GpuTimerScope>,
@@ -102,7 +102,7 @@ impl<'a, W: ProfilerCommandRecorder> OwningScope<'a, W> {
     #[track_caller]
     pub fn start(
         label: &str,
-        profiler: &'a mut GpuProfiler,
+        profiler: &'a GpuProfiler,
         mut recorder: W,
         device: &wgpu::Device,
     ) -> Self {
@@ -119,7 +119,7 @@ impl<'a, W: ProfilerCommandRecorder> OwningScope<'a, W> {
     #[track_caller]
     pub fn start_nested(
         label: &str,
-        profiler: &'a mut GpuProfiler,
+        profiler: &'a GpuProfiler,
         mut recorder: W,
         device: &wgpu::Device,
         parent: Option<&GpuTimerScope>,
@@ -153,7 +153,7 @@ impl<'a, W: ProfilerCommandRecorder> ManualOwningScope<'a, W> {
     #[track_caller]
     pub fn start(
         label: &str,
-        profiler: &'a mut GpuProfiler,
+        profiler: &'a GpuProfiler,
         mut recorder: W,
         device: &wgpu::Device,
     ) -> Self {
@@ -171,7 +171,7 @@ impl<'a, W: ProfilerCommandRecorder> ManualOwningScope<'a, W> {
     #[track_caller]
     pub fn start_nested(
         label: &str,
-        profiler: &'a mut GpuProfiler,
+        profiler: &'a GpuProfiler,
         mut recorder: W,
         device: &wgpu::Device,
         parent: Option<&GpuTimerScope>,
@@ -194,7 +194,7 @@ impl<'a, W: ProfilerCommandRecorder> ManualOwningScope<'a, W> {
     /// Ends the scope allowing the extraction of the owned [`ProfilerCommandRecorder`]
     /// and the mutable reference to the [`GpuProfiler`].
     #[track_caller]
-    pub fn end_scope(mut self) -> (W, &'a mut GpuProfiler) {
+    pub fn end_scope(mut self) -> (W, &'a GpuProfiler) {
         // Can't fail since creation implies begin_scope.
         self.profiler
             .end_scope(&mut self.recorder, self.scope.take().unwrap());

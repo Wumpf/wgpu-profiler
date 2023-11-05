@@ -247,13 +247,16 @@ impl GpuProfiler {
     pub fn new(settings: GpuProfilerSettings) -> Result<Self, CreationError> {
         settings.validate()?;
 
+        let (closed_scope_sender, closed_scope_receiver) = std::sync::mpsc::channel();
+
         Ok(GpuProfiler {
             unused_pools: Vec::new(),
 
             pending_frames: Vec::with_capacity(settings.max_num_pending_frames),
             active_frame: ActiveFrame {
                 query_pools: RwLock::new(PendingFramePools::default()),
-                closed_scope_by_parent_handle: HashMap::new(),
+                closed_scope_sender,
+                closed_scope_receiver,
             },
 
             num_open_scopes: AtomicU32::new(0),
@@ -382,7 +385,7 @@ impl GpuProfiler {
     ///
     /// TODO: UPDATE DOCS
     pub fn end_scope<Recorder: ProfilerCommandRecorder>(
-        &mut self,
+        &self,
         encoder_or_pass: &mut Recorder,
         open_scope: GpuTimerScope,
     ) {
@@ -395,12 +398,11 @@ impl GpuProfiler {
             }
         }
 
-        // TODO: make this a channel send.
-        self.active_frame
-            .closed_scope_by_parent_handle
-            .entry(open_scope.parent_handle)
-            .or_default()
-            .push(open_scope);
+        let send_result = self.active_frame.closed_scope_sender.send(open_scope);
+
+        // The only way we can fail sending the scope is if the receiver has been dropped.
+        // Since it sits on `active_frame` as well, there's no way for this to happen!
+        debug_assert!(send_result.is_ok());
 
         if self.settings.enable_debug_groups {
             encoder_or_pass.pop_debug_group();
@@ -472,13 +474,20 @@ impl GpuProfiler {
         }
 
         let query_pools = self.active_frame.query_pools.get_mut();
+
         let mut new_pending_frame = PendingFrame {
             query_pools: std::mem::take(&mut query_pools.used_pools),
-            closed_scope_by_parent_handle: std::mem::take(
-                &mut self.active_frame.closed_scope_by_parent_handle,
-            ),
+            closed_scope_by_parent_handle: HashMap::new(),
             mapped_buffers: Arc::new(AtomicU32::new(0)),
         };
+
+        for closed_scope in self.active_frame.closed_scope_receiver.try_iter() {
+            new_pending_frame
+                .closed_scope_by_parent_handle
+                .entry(closed_scope.parent_handle)
+                .or_insert_with(Vec::new)
+                .push(closed_scope);
+        }
 
         // All loads of pool.num_used_queries are Relaxed since we assume,
         // that we already acquired the state during `resolve_queries` and no further otherwise unobserved
@@ -868,7 +877,14 @@ struct PendingFramePools {
 
 struct ActiveFrame {
     query_pools: RwLock<PendingFramePools>,
-    closed_scope_by_parent_handle: HashMap<Option<GpuTimerScopeTreeHandle>, Vec<GpuTimerScope>>,
+
+    /// Closed scopes get send to this channel.
+    ///
+    /// Note that channel is still overkill for what we want here:
+    /// We're in a multi producer situation, *but* the single consumer is known to be only
+    /// active in a mut context, i.e. while we're consuming we know that we're not producing.
+    closed_scope_sender: std::sync::mpsc::Sender<GpuTimerScope>,
+    closed_scope_receiver: std::sync::mpsc::Receiver<GpuTimerScope>,
 }
 
 struct PendingFrame {
