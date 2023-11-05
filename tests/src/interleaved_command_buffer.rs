@@ -123,11 +123,9 @@ fn multithreaded_scopes() {
         device.features(),
         &frame,
         &(0..NUM_SCOPES_PER_THREAD)
-            .into_iter()
             .map(|i| expected_scope(format!("e0_s{i}"), Requires::Timestamps, []))
             .chain(
                 (0..NUM_SCOPES_PER_THREAD)
-                    .into_iter()
                     .map(|i| expected_scope(format!("e1_s{i}"), Requires::Timestamps, [])),
             )
             .collect::<Vec<_>>(),

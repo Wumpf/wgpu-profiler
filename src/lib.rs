@@ -88,7 +88,6 @@ pub use scope::{ManualOwningScope, OwningScope, Scope};
 // ---------------
 
 use std::{
-    cell::Cell,
     collections::HashMap,
     ops::Range,
     sync::{
@@ -348,7 +347,7 @@ impl GpuProfiler {
             let tracy_scope = {
                 let location = std::panic::Location::caller();
                 self.tracy_context.as_ref().and_then(|c| {
-                    c.span_alloc(label, "", location.file(), location.line())
+                    c.span_alloc(&label, "", location.file(), location.line())
                         .ok()
                 })
             };
@@ -387,7 +386,7 @@ impl GpuProfiler {
     pub fn end_scope<Recorder: ProfilerCommandRecorder>(
         &self,
         encoder_or_pass: &mut Recorder,
-        open_scope: GpuTimerScope,
+        #[cfg_attr(not(feature = "tracy"), allow(unused_mut))] mut open_scope: GpuTimerScope,
     ) {
         if let Some(query) = &open_scope.query {
             encoder_or_pass.write_timestamp(&query.pool.query_set, query.begin_query_idx + 1);
@@ -487,7 +486,7 @@ impl GpuProfiler {
             new_pending_frame
                 .closed_scope_by_parent_handle
                 .entry(closed_scope.parent_handle)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(closed_scope);
         }
 
@@ -687,7 +686,7 @@ impl GpuProfiler {
             if let Some(pair) = query_pools
                 .used_pools
                 .last()
-                .and_then(|pool| Self::try_reserve_query_pair(pool))
+                .and_then(Self::try_reserve_query_pair)
             {
                 return pair;
             }
@@ -702,7 +701,7 @@ impl GpuProfiler {
             if let Some(pair) = query_pools
                 .used_pools
                 .last()
-                .and_then(|pool| Self::try_reserve_query_pair(pool))
+                .and_then(Self::try_reserve_query_pair)
             {
                 return pair;
             }
@@ -756,6 +755,8 @@ impl GpuProfiler {
                     query,
                     handle,
                     parent_handle: _,
+                    #[cfg(feature = "tracy")]
+                    tracy_scope,
                 } = scope;
 
                 let Some(query) = query else {
@@ -782,7 +783,7 @@ impl GpuProfiler {
                 );
 
                 #[cfg(feature = "tracy")]
-                if let Some(tracy_scope) = scope.tracy_scope {
+                if let Some(tracy_scope) = tracy_scope {
                     tracy_scope.upload_timestamp(start_raw as i64, end_raw as i64);
                 }
 
