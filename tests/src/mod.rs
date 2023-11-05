@@ -1,3 +1,7 @@
+mod dropped_frame_handling;
+mod errors;
+mod nested_scopes;
+
 pub fn create_device(features: wgpu::Features) -> (wgpu::Backend, wgpu::Device, wgpu::Queue) {
     async fn create_default_device_async(
         features: wgpu::Features,

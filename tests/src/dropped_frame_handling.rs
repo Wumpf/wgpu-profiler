@@ -1,8 +1,6 @@
 use wgpu_profiler::GpuProfilerSettings;
 
-mod utils;
-
-use utils::create_device;
+use super::create_device;
 
 // regression test for bug described in https://github.com/Wumpf/wgpu-profiler/pull/18
 #[test]

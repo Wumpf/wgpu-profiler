@@ -1,6 +1,6 @@
 use wgpu_profiler::{GpuProfiler, GpuProfilerSettings, GpuTimerScopeResult};
 
-mod utils;
+use super::create_device;
 
 #[derive(Debug)]
 enum Requires {
@@ -177,20 +177,18 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
 
 #[test]
 fn nested_scopes_all_features() {
-    let (_, device, queue) = utils::create_device(GpuProfiler::ALL_WGPU_TIMER_FEATURES);
+    let (_, device, queue) = create_device(GpuProfiler::ALL_WGPU_TIMER_FEATURES);
     nested_scopes(&device, &queue);
 }
 
 #[test]
 fn nested_scopes_no_pass_features() {
-    let (_, device, queue) = utils::create_device(wgpu::Features::TIMESTAMP_QUERY);
+    let (_, device, queue) = create_device(wgpu::Features::TIMESTAMP_QUERY);
     nested_scopes(&device, &queue);
 }
 
 #[test]
 fn nested_scopes_no_features() {
-    let (_, device, queue) = utils::create_device(wgpu::Features::empty());
+    let (_, device, queue) = create_device(wgpu::Features::empty());
     nested_scopes(&device, &queue);
 }
-
-// TODO: interleaving of scope begin_end & multithreading is not yet possible!

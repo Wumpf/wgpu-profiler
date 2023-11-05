@@ -1,8 +1,6 @@
 use wgpu_profiler::GpuProfilerSettings;
 
-mod utils;
-
-use utils::create_device;
+use super::create_device;
 
 #[test]
 fn invalid_pending_frame_count() {
