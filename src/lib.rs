@@ -76,14 +76,6 @@ On [`GpuProfiler::end_frame`], we memorize the total size of all `QueryPool`s in
 `QueryPool` from finished frames are re-used, unless they are deemed too small.
 */
 
-use std::{
-    collections::HashMap,
-    convert::TryInto,
-    ops::Range,
-    sync::atomic::{AtomicU32, Ordering},
-    thread::ThreadId,
-};
-
 pub mod chrometrace;
 mod errors;
 mod scope;
@@ -92,6 +84,21 @@ mod tracy;
 
 pub use errors::{CreationError, EndFrameError, SettingsError};
 pub use scope::{ManualOwningScope, OwningScope, Scope};
+
+// ---------------
+
+use std::{
+    cell::Cell,
+    collections::HashMap,
+    ops::Range,
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        Arc,
+    },
+    thread::ThreadId,
+};
+
+use parking_lot::RwLock;
 
 /// The result of a gpu timer scope.
 #[derive(Debug, Clone)]
@@ -134,8 +141,8 @@ pub struct GpuTimerScope {
     /// The thread id of the thread that opened this scope.
     pub tid: ThreadId,
 
-    /// Address of the start query (if any). The end query is always the next in line.
-    start_query: Option<QueryPoolQueryAddress>,
+    /// The actual query on a query pool if any (none if disabled for this type of scope).
+    query: Option<ReservedQueryPair>,
 
     /// Handle which identifies this scope, used for building the tree of scopes.
     handle: GpuTimerScopeTreeHandle,
@@ -210,8 +217,8 @@ impl GpuProfilerSettings {
 pub struct GpuProfiler {
     unused_pools: Vec<QueryPool>,
 
+    active_frame: ActiveFrame,
     pending_frames: Vec<PendingFrame>,
-    active_frame: PendingFrame,
 
     num_open_scopes: AtomicU32,
     next_scope_handle: AtomicU32,
@@ -244,9 +251,8 @@ impl GpuProfiler {
             unused_pools: Vec::new(),
 
             pending_frames: Vec::with_capacity(settings.max_num_pending_frames),
-            active_frame: PendingFrame {
-                query_pools: Vec::new(),
-                mapped_buffers: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            active_frame: ActiveFrame {
+                query_pools: RwLock::new(PendingFramePools::default()),
                 closed_scope_by_parent_handle: HashMap::new(),
             },
 
@@ -314,7 +320,7 @@ impl GpuProfiler {
     #[track_caller]
     #[must_use]
     pub fn begin_scope<Recorder: ProfilerCommandRecorder>(
-        &mut self,
+        &self,
         label: impl Into<String>,
         encoder_or_pass: &mut Recorder,
         device: &wgpu::Device,
@@ -329,15 +335,11 @@ impl GpuProfiler {
             encoder_or_pass.push_debug_group(&label);
         }
 
-        let (start_query, _tracy_scope) = if self.settings.enable_timer_scopes
+        let (query, _tracy_scope) = if self.settings.enable_timer_scopes
             && timestamp_write_supported(encoder_or_pass, device.features())
         {
-            let start_query = self.allocate_query_pair(device);
-
-            encoder_or_pass.write_timestamp(
-                &self.active_frame.query_pools[start_query.pool_idx as usize].query_set,
-                start_query.query_idx,
-            );
+            let query = self.reserve_query_pair(device);
+            encoder_or_pass.write_timestamp(&query.pool.query_set, query.begin_query_idx);
 
             #[cfg(feature = "tracy")]
             let tracy_scope = {
@@ -350,7 +352,7 @@ impl GpuProfiler {
             #[cfg(not(feature = "tracy"))]
             let tracy_scope = Option::<()>::None;
 
-            (Some(start_query), tracy_scope)
+            (Some(query), tracy_scope)
         } else {
             (None, None)
         };
@@ -359,7 +361,7 @@ impl GpuProfiler {
             label,
             pid: std::process::id(),
             tid: std::thread::current().id(),
-            start_query,
+            query,
             handle,
             parent_handle: parent_scope.map(|s| s.handle),
             #[cfg(feature = "tracy")]
@@ -384,11 +386,8 @@ impl GpuProfiler {
         encoder_or_pass: &mut Recorder,
         open_scope: GpuTimerScope,
     ) {
-        if let Some(start_query) = &open_scope.start_query {
-            encoder_or_pass.write_timestamp(
-                &self.active_frame.query_pools[start_query.pool_idx as usize].query_set,
-                start_query.query_idx + 1,
-            );
+        if let Some(query) = &open_scope.query {
+            encoder_or_pass.write_timestamp(&query.pool.query_set, query.begin_query_idx + 1);
 
             #[cfg(feature = "tracy")]
             if let Some(ref mut tracy_scope) = open_scope.tracy_scope {
@@ -412,33 +411,51 @@ impl GpuProfiler {
         self.num_open_scopes.fetch_sub(1, Ordering::Release);
     }
 
-    /// Puts query resolve commands in the encoder for all unresolved, pending queries of the current profiler frame.
+    /// Puts query resolve commands in the encoder for all unresolved, pending queries of the active profiler frame.
     ///
     /// Note that you do *not* need to do this for every encoder, it is sufficient do do this once per frame as long
-    /// as you submit this encoder after all other encoders that may have opened scopes in the same frame.
+    /// as you submit the corresponding command buffer after all others that may have opened scopes in the same frame.
     /// (It does not matter if the passed encoder itself has previously opened scopes or not.)
+    /// If you were to make this part of a command buffer that is enqueued before any other that has
+    /// opened scopes in the same profiling frame, no failure will occur but some timing results may be invalid.
+    ///
+    /// It is advised to call this only once at the end of a profiling frame, but it is safe to do so several times.
+    ///
+    ///
+    /// Implementation note:
+    /// This method could be made `&self`, taking the internal lock on the query pools.
+    /// However, the intended use is to call this once at the end of a frame, so we instead
+    /// encourage this explicit sync point and avoid the lock.
     pub fn resolve_queries(&mut self, encoder: &mut wgpu::CommandEncoder) {
-        for query_pool in self.active_frame.query_pools.iter_mut() {
-            if query_pool.num_resolved_queries == query_pool.num_used_queries {
+        let query_pools = self.active_frame.query_pools.get_mut();
+
+        for query_pool in query_pools.used_pools.iter_mut() {
+            // We sync with the last update of num_used_query (which has Release semantics)
+            // mostly to be on the safe side - it happened inside a lock which gives it release semantics anyways
+            // but the concern is that if we don't acquire here, we may miss on other side prior effects of the query begin.
+            let num_used_queries = query_pool.num_used_queries.load(Ordering::Acquire);
+            let num_resolved_queries = query_pool.num_resolved_queries.get();
+
+            if num_resolved_queries == num_used_queries {
                 continue;
             }
 
-            assert!(query_pool.num_resolved_queries < query_pool.num_used_queries);
+            assert!(num_resolved_queries < num_used_queries);
 
             encoder.resolve_query_set(
                 &query_pool.query_set,
-                query_pool.num_resolved_queries..query_pool.num_used_queries,
+                num_resolved_queries..num_used_queries,
                 &query_pool.resolve_buffer,
-                (query_pool.num_resolved_queries * QUERY_SIZE) as u64,
+                (num_resolved_queries * QUERY_SIZE) as u64,
             );
-            query_pool.num_resolved_queries = query_pool.num_used_queries;
+            query_pool.num_resolved_queries.set(num_used_queries);
 
             encoder.copy_buffer_to_buffer(
                 &query_pool.resolve_buffer,
                 0,
                 &query_pool.read_buffer,
                 0,
-                (query_pool.num_used_queries * QUERY_SIZE) as u64,
+                (num_used_queries * QUERY_SIZE) as u64,
             );
         }
     }
@@ -454,11 +471,25 @@ impl GpuProfiler {
             return Err(EndFrameError::UnclosedScopes(num_open_scopes));
         }
 
-        let num_unresolved_queries = self
-            .active_frame
+        let query_pools = self.active_frame.query_pools.get_mut();
+        let mut new_pending_frame = PendingFrame {
+            query_pools: std::mem::take(&mut query_pools.used_pools),
+            closed_scope_by_parent_handle: std::mem::take(
+                &mut self.active_frame.closed_scope_by_parent_handle,
+            ),
+            mapped_buffers: Arc::new(AtomicU32::new(0)),
+        };
+
+        // All loads of pool.num_used_queries are Relaxed since we assume,
+        // that we already acquired the state during `resolve_queries` and no further otherwise unobserved
+        // modifications happened since then.
+
+        let num_unresolved_queries = new_pending_frame
             .query_pools
             .iter()
-            .map(|pool| pool.num_used_queries - pool.num_resolved_queries)
+            .map(|pool| {
+                pool.num_used_queries.load(Ordering::Relaxed) - pool.num_resolved_queries.get()
+            })
             .sum();
         if num_unresolved_queries != 0 {
             return Err(EndFrameError::UnresolvedQueries(num_unresolved_queries));
@@ -467,10 +498,10 @@ impl GpuProfiler {
         self.size_for_new_query_pools = self
             .size_for_new_query_pools
             .max(
-                self.active_frame
+                new_pending_frame
                     .query_pools
                     .iter()
-                    .map(|pool| pool.num_used_queries)
+                    .map(|pool| pool.num_used_queries.load(Ordering::Relaxed))
                     .sum(),
             )
             .min(QUERY_SET_MAX_QUERIES);
@@ -481,6 +512,9 @@ impl GpuProfiler {
             // Dropping the oldest frame could get us into an endless cycle where we're never able to complete
             // any pending frames as the ones closest to completion would be evicted.
             if let Some(dropped_frame) = self.pending_frames.pop() {
+                // Drop scopes first since they still have references to the query pools that we want to reuse.
+                drop(dropped_frame.closed_scope_by_parent_handle);
+
                 // Mark the frame as dropped. We'll give back the query pools once the mapping is done.
                 // Any previously issued map_async call that haven't finished yet, will invoke their callback with mapping abort.
                 self.reset_and_cache_unused_query_pools(dropped_frame.query_pools);
@@ -488,9 +522,10 @@ impl GpuProfiler {
         }
 
         // Map all buffers.
-        for pool in self.active_frame.query_pools.iter_mut() {
-            let mapped_buffers = self.active_frame.mapped_buffers.clone();
-            pool.read_buffer_slice()
+        for pool in new_pending_frame.query_pools.iter_mut() {
+            let mapped_buffers = new_pending_frame.mapped_buffers.clone();
+            pool.read_buffer
+                .slice(0..(pool.num_used_queries.load(Ordering::Relaxed) * QUERY_SIZE) as u64)
                 .map_async(wgpu::MapMode::Read, move |mapping_result| {
                     // Mapping should not fail unless it was cancelled due to the frame being dropped.
                     match mapping_result {
@@ -508,10 +543,7 @@ impl GpuProfiler {
         }
 
         // Enqueue
-        let mut frame = Default::default();
-        std::mem::swap(&mut frame, &mut self.active_frame);
-        self.pending_frames.push(frame);
-
+        self.pending_frames.push(new_pending_frame);
         assert!(self.pending_frames.len() <= self.settings.max_num_pending_frames);
 
         Ok(())
@@ -533,7 +565,7 @@ impl GpuProfiler {
         if frame
             .mapped_buffers
             .load(std::sync::atomic::Ordering::Acquire)
-            != frame.query_pools.len()
+            != frame.query_pools.len() as u32
         {
             return None;
         }
@@ -541,17 +573,10 @@ impl GpuProfiler {
         let mut frame = self.pending_frames.remove(0);
 
         let results = {
-            let read_query_buffers: Vec<wgpu::BufferView> = frame
-                .query_pools
-                .iter()
-                .map(|pool| pool.read_buffer_slice().get_mapped_range())
-                .collect();
-
             let timestamp_to_sec = timestamp_period as f64 / 1000.0 / 1000.0 / 1000.0;
 
             Self::process_timings_recursive(
                 timestamp_to_sec,
-                &read_query_buffers,
                 &mut frame.closed_scope_by_parent_handle,
                 None,
             )
@@ -584,62 +609,120 @@ fn timestamp_write_supported<Recorder: ProfilerCommandRecorder>(
 }
 
 impl GpuProfiler {
-    fn reset_and_cache_unused_query_pools(&mut self, mut query_pools: Vec<QueryPool>) {
-        // If a pool was less than half of the size of the max frame, then we don't keep it.
-        // This way we're going to need less pools in upcoming frames and thus have less overhead in the long run.
-        // If timer scopes were disabled, we also don't keep any pools.
+    fn reset_and_cache_unused_query_pools(&mut self, mut discarded_pools: Vec<Arc<QueryPool>>) {
         let capacity_threshold = self.size_for_new_query_pools / 2;
-        for mut pool in query_pools.drain(..) {
+        for pool in discarded_pools.drain(..) {
+            // If the pool is truly unused now, it's ref count should be 1!
+            // If we use it anywhere else we have an implementation bug.
+            let mut pool = Arc::try_unwrap(pool).expect("Pool still in use");
             pool.reset();
+
+            // If a pool was less than half of the size of the max frame, then we don't keep it.
+            // This way we're going to need less pools in upcoming frames and thus have less overhead in the long run.
+            // If timer scopes were disabled, we also don't keep any pools.
             if self.settings.enable_timer_scopes && pool.capacity >= capacity_threshold {
-                self.unused_pools.push(pool);
+                self.active_frame
+                    .query_pools
+                    .get_mut()
+                    .unused_pools
+                    .push(pool);
+            }
+        }
+    }
+
+    fn try_reserve_query_pair(pool: &Arc<QueryPool>) -> Option<ReservedQueryPair> {
+        let mut num_used_queries = pool.num_used_queries.load(Ordering::Relaxed);
+
+        loop {
+            if pool.capacity < num_used_queries + 2 {
+                // This pool is out of capacity, we failed the operation.
+                return None;
+            }
+
+            match pool.num_used_queries.compare_exchange_weak(
+                num_used_queries,
+                num_used_queries + 2,
+                // Write to num_used_queries with release semantics to be on the safe side.
+                // (It doesn't look like there's other side effects that we need to publish.)
+                Ordering::Release,
+                // No barrier for the failure case.
+                // The only thing we have to acquire is the pool's capacity which is constant and
+                // was definitely acquired by the RWLock prior to this call.
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => {
+                    // We successfully acquired two queries!
+                    return Some(ReservedQueryPair {
+                        pool: pool.clone(),
+                        begin_query_idx: num_used_queries,
+                    });
+                }
+                Err(updated) => {
+                    // Someone else acquired queries in the meantime, try again.
+                    num_used_queries = updated;
+                }
             }
         }
     }
 
     // Reserves two query objects.
     // Our query pools always have an even number of queries, so we know the next query is the next in the same pool.
-    fn allocate_query_pair(&mut self, device: &wgpu::Device) -> QueryPoolQueryAddress {
-        let num_pools = self.active_frame.query_pools.len();
-
-        if let Some(active_pool) = self.active_frame.query_pools.last_mut() {
-            if active_pool.capacity > active_pool.num_used_queries {
-                let address = QueryPoolQueryAddress {
-                    pool_idx: num_pools as u32 - 1,
-                    query_idx: active_pool.num_used_queries,
-                };
-                active_pool.num_used_queries += 2;
-                assert!(active_pool.num_used_queries <= active_pool.capacity);
-                return address;
+    fn reserve_query_pair(&self, device: &wgpu::Device) -> ReservedQueryPair {
+        // First, try to allocate from current top pool.
+        // Requires taking a read lock on the current query pool.
+        {
+            let query_pools = self.active_frame.query_pools.read();
+            if let Some(pair) = query_pools
+                .used_pools
+                .last()
+                .and_then(|pool| Self::try_reserve_query_pair(pool))
+            {
+                return pair;
             }
         }
+        // If this didn't work, we may need to add a new pool.
+        // Requires taking a write lock on the current query pool.
+        {
+            let mut query_pools = self.active_frame.query_pools.write();
 
-        let mut new_pool = if let Some(reused_pool) = self.unused_pools.pop() {
-            reused_pool
-        } else {
-            QueryPool::new(
-                self.active_frame
-                    .query_pools
-                    .iter()
-                    .map(|pool| pool.capacity)
-                    .sum::<u32>()
-                    .max(self.size_for_new_query_pools)
-                    .min(QUERY_SET_MAX_QUERIES),
-                device,
-            )
-        };
-        new_pool.num_used_queries += 2;
-        self.active_frame.query_pools.push(new_pool);
+            // It could be that by now, another thread has already added a new pool!
+            // This is a bit unfortunate because it means we unnecessarily took a write lock, but it seems hard to get around this.
+            if let Some(pair) = query_pools
+                .used_pools
+                .last()
+                .and_then(|pool| Self::try_reserve_query_pair(pool))
+            {
+                return pair;
+            }
 
-        QueryPoolQueryAddress {
-            pool_idx: self.active_frame.query_pools.len() as u32 - 1,
-            query_idx: 0,
+            // Now we know for certain that the last pool is exhausted, so add a new one!
+            let new_pool = if let Some(reused_pool) = query_pools.unused_pools.pop() {
+                // First check if there's an unused pool we can take.
+                Arc::new(reused_pool)
+            } else {
+                // If we can't, create a new pool that is as big as all previous pools combined.
+                Arc::new(QueryPool::new(
+                    query_pools
+                        .used_pools
+                        .iter()
+                        .map(|pool| pool.capacity)
+                        .sum::<u32>()
+                        .max(self.size_for_new_query_pools)
+                        .min(QUERY_SET_MAX_QUERIES),
+                    device,
+                ))
+            };
+
+            let pair = Self::try_reserve_query_pair(&new_pool)
+                .expect("Freshly reserved pool doesn't have enough capacity");
+            query_pools.used_pools.push(new_pool);
+
+            pair
         }
     }
 
     fn process_timings_recursive(
         timestamp_to_sec: f64,
-        resolved_query_buffers: &[wgpu::BufferView],
         closed_scope_by_parent_handle: &mut HashMap<
             Option<GpuTimerScopeTreeHandle>,
             Vec<GpuTimerScope>,
@@ -658,12 +741,12 @@ impl GpuProfiler {
                     label,
                     pid,
                     tid,
-                    start_query,
+                    query,
                     handle,
                     parent_handle: _,
                 } = scope;
 
-                let Some(start_query) = start_query else {
+                let Some(query) = query else {
                     // Inactive scopes don't have any results or nested scopes with results.
                     // Currently, we drop them from the results completely.
                     // In the future we could still make them show up since they convey information like label & pid/tid.
@@ -671,18 +754,17 @@ impl GpuProfiler {
                 };
 
                 // Read timestamp from buffer.
-                let buffer = &resolved_query_buffers[start_query.pool_idx as usize];
-                let offset = (start_query.query_idx * QUERY_SIZE) as usize;
-
                 // By design timestamps for start/end are consecutive.
-                let start_raw = u64::from_le_bytes(
-                    buffer[offset..(offset + std::mem::size_of::<u64>())]
-                        .try_into()
-                        .unwrap(),
-                );
+                let offset = (query.begin_query_idx * QUERY_SIZE) as u64;
+                let buffer_slice = &query
+                    .pool
+                    .read_buffer
+                    .slice(offset..(offset + (QUERY_SIZE * 2) as u64))
+                    .get_mapped_range();
+                let start_raw =
+                    u64::from_le_bytes(buffer_slice[0..QUERY_SIZE as usize].try_into().unwrap());
                 let end_raw = u64::from_le_bytes(
-                    buffer[(offset + std::mem::size_of::<u64>())
-                        ..(offset + std::mem::size_of::<u64>() * 2)]
+                    buffer_slice[QUERY_SIZE as usize..(QUERY_SIZE as usize) * 2]
                         .try_into()
                         .unwrap(),
                 );
@@ -694,7 +776,6 @@ impl GpuProfiler {
 
                 let nested_scopes = Self::process_timings_recursive(
                     timestamp_to_sec,
-                    resolved_query_buffers,
                     closed_scope_by_parent_handle,
                     Some(handle),
                 );
@@ -712,13 +793,20 @@ impl GpuProfiler {
     }
 }
 
-#[derive(Default)]
-struct QueryPoolQueryAddress {
-    pool_idx: u32,
-    query_idx: u32,
+struct ReservedQueryPair {
+    /// QueryPool on which both start & end queries of the scope are done.
+    ///
+    /// By putting an arc here instead of an index into a vec, we don't need
+    /// need to take any locks upon closing a profiling scope.
+    pool: Arc<QueryPool>,
+
+    /// Query index at which the scope begins.
+    /// The query after this is reserved for the end of the scope.
+    begin_query_idx: u32,
 }
 
 /// A pool of queries, consisting of a single queryset & buffer for query results.
+#[derive(Debug)]
 struct QueryPool {
     query_set: wgpu::QuerySet,
 
@@ -726,8 +814,8 @@ struct QueryPool {
     read_buffer: wgpu::Buffer,
 
     capacity: u32,
-    num_used_queries: u32,
-    num_resolved_queries: u32,
+    num_used_queries: AtomicU32,
+    num_resolved_queries: Cell<u32>,
 }
 
 impl QueryPool {
@@ -756,28 +844,39 @@ impl QueryPool {
             }),
 
             capacity,
-            num_used_queries: 0,
-            num_resolved_queries: 0,
+            num_used_queries: AtomicU32::new(0),
+            num_resolved_queries: Cell::new(0),
         }
     }
 
     fn reset(&mut self) {
-        self.num_used_queries = 0;
-        self.num_resolved_queries = 0;
+        self.num_used_queries = AtomicU32::new(0);
+        self.num_resolved_queries.set(0);
         self.read_buffer.unmap();
-    }
-
-    fn read_buffer_slice(&self) -> wgpu::BufferSlice {
-        self.read_buffer
-            .slice(0..(self.num_resolved_queries * QUERY_SIZE) as u64)
     }
 }
 
 #[derive(Default)]
-struct PendingFrame {
-    query_pools: Vec<QueryPool>,
-    mapped_buffers: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+struct PendingFramePools {
+    /// List of all pools used in this frame.
+    /// The last pool is the one new profiling scopes will try to make timer queries into.
+    used_pools: Vec<Arc<QueryPool>>,
+
+    /// List of unused pools recycled from previous frames.
+    unused_pools: Vec<QueryPool>,
+}
+
+struct ActiveFrame {
+    query_pools: RwLock<PendingFramePools>,
     closed_scope_by_parent_handle: HashMap<Option<GpuTimerScopeTreeHandle>, Vec<GpuTimerScope>>,
+}
+
+struct PendingFrame {
+    query_pools: Vec<Arc<QueryPool>>,
+    closed_scope_by_parent_handle: HashMap<Option<GpuTimerScopeTreeHandle>, Vec<GpuTimerScope>>,
+
+    /// Keeps track of the number of buffers in the query pool that have been mapped successfully.
+    mapped_buffers: std::sync::Arc<std::sync::atomic::AtomicU32>,
 }
 
 pub trait ProfilerCommandRecorder {
