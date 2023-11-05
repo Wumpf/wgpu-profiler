@@ -35,7 +35,7 @@ let mut profiler = GpuProfiler::new(GpuProfilerSettings::default()).unwrap();
 # let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
 // Using scopes is easiest with the wgpu_profiler::Scope struct:
 {
-    wgpu_profiler::Scope::start("name of your scope", &mut profiler, &mut encoder, &device);
+    wgpu_profiler::Scope::start("name of your scope", &profiler, &mut encoder, &device);
     // wgpu commands go here
 }
 

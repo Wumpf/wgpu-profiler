@@ -1,5 +1,6 @@
 mod dropped_frame_handling;
 mod errors;
+mod interleaved_command_buffer;
 mod nested_scopes;
 
 pub fn create_device(features: wgpu::Features) -> (wgpu::Backend, wgpu::Device, wgpu::Queue) {
@@ -28,4 +29,39 @@ pub fn create_device(features: wgpu::Features) -> (wgpu::Backend, wgpu::Device, 
     }
 
     futures_lite::future::block_on(create_default_device_async(features))
+}
+
+#[derive(Debug)]
+enum Requires {
+    Timestamps,
+    TimestampsInPasses,
+}
+
+#[derive(Debug)]
+struct ExpectedScope(&'static str, Requires, &'static [ExpectedScope]);
+
+fn validate_results(
+    features: wgpu::Features,
+    result: &[wgpu_profiler::GpuTimerScopeResult],
+    expected: &[ExpectedScope],
+) {
+    let expected = expected
+        .iter()
+        .filter(|expected| match expected.1 {
+            Requires::Timestamps => features.contains(wgpu::Features::TIMESTAMP_QUERY),
+            Requires::TimestampsInPasses => {
+                features.contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES)
+            }
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        result.len(),
+        expected.len(),
+        "result: {result:?}\nexpected: {expected:?}"
+    );
+    for (result, expected) in result.iter().zip(expected.iter()) {
+        assert_eq!(result.label, expected.0);
+        validate_results(features, &result.nested_scopes, &expected.2);
+    }
 }
