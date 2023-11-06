@@ -153,6 +153,8 @@ pub struct GpuTimerScope {
     tracy_scope: Option<tracy_client::GpuSpan>,
 }
 
+// TODO: drop impl that shouts at you if you don't end the scope
+
 /// Settings passed on initialization of [`GpuProfiler`].
 #[derive(Debug, Clone)]
 pub struct GpuProfilerSettings {

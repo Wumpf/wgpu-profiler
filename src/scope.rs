@@ -7,18 +7,18 @@ use crate::{GpuProfiler, GpuTimerScope, ProfilerCommandRecorder};
 ///
 /// Calls [`GpuProfiler::end_scope()`] on drop.
 pub struct Scope<'a, W: ProfilerCommandRecorder> {
-    profiler: &'a GpuProfiler,
-    recorder: &'a mut W,
-    scope: Option<GpuTimerScope>,
+    pub profiler: &'a GpuProfiler,
+    pub recorder: &'a mut W,
+    pub scope: Option<GpuTimerScope>,
 }
 
 /// Scope that takes ownership of the encoder/pass.
 ///
 /// Calls [`GpuProfiler::end_scope()`] on drop.
 pub struct OwningScope<'a, W: ProfilerCommandRecorder> {
-    profiler: &'a GpuProfiler,
-    recorder: W,
-    scope: Option<GpuTimerScope>,
+    pub profiler: &'a GpuProfiler,
+    pub recorder: W,
+    pub scope: Option<GpuTimerScope>,
 }
 
 /// Scope that takes ownership of the encoder/pass.
@@ -28,15 +28,10 @@ pub struct OwningScope<'a, W: ProfilerCommandRecorder> {
 /// This is useful when the owned value needs to be recovered after the end of the scope.
 /// In particular, to submit a [`wgpu::CommandEncoder`] to a queue, ownership of the encoder is necessary.
 pub struct ManualOwningScope<'a, W: ProfilerCommandRecorder> {
-    profiler: &'a GpuProfiler,
-    recorder: W,
-    scope: Option<GpuTimerScope>,
+    pub profiler: &'a GpuProfiler,
+    pub recorder: W,
+    pub scope: Option<GpuTimerScope>,
 }
-
-// TODO: this might be useful!
-// trait ScopeWrapper {
-//     pub fn profiler_scope(&self) -> Option<&GpuTimerScope>;
-// }
 
 impl<'a, W: ProfilerCommandRecorder> Scope<'a, W> {
     /// Starts a new profiler scope. Scope is closed on drop.
@@ -85,14 +80,6 @@ impl<'a, W: ProfilerCommandRecorder> Scope<'a, W> {
             device,
             self.scope.as_ref(),
         )
-    }
-
-    /// Return the open profiler scope.
-    ///
-    /// This is useful for manually creating nested scopes
-    /// It's guaranteed to be `Some` unless the scope has already been dropped.
-    pub fn profiler_scope(&self) -> Option<&GpuTimerScope> {
-        self.scope.as_ref()
     }
 }
 
@@ -191,19 +178,20 @@ impl<'a, W: ProfilerCommandRecorder> ManualOwningScope<'a, W> {
         Scope::start(label, self.profiler, &mut self.recorder, device)
     }
 
-    /// Ends the scope allowing the extraction of the owned [`ProfilerCommandRecorder`]
-    /// and the mutable reference to the [`GpuProfiler`].
+    /// Ends the scope allowing the extraction of the owned [`ProfilerCommandRecorder`].
     #[track_caller]
-    pub fn end_scope(mut self) -> (W, &'a GpuProfiler) {
+    pub fn end_scope(mut self) -> W {
         // Can't fail since creation implies begin_scope.
         self.profiler
             .end_scope(&mut self.recorder, self.scope.take().unwrap());
-        (self.recorder, self.profiler)
+        self.recorder
     }
 }
 
 impl<'a> Scope<'a, wgpu::CommandEncoder> {
     /// Start a render pass wrapped in a [`OwningScope`].
+    ///
+    /// TODO(#51): Use `RenderPassDescriptor::timestamp_writes`
     #[track_caller]
     pub fn scoped_render_pass<'b>(
         &'b mut self,
@@ -222,6 +210,8 @@ impl<'a> Scope<'a, wgpu::CommandEncoder> {
     }
 
     /// Start a compute pass wrapped in a [`OwningScope`].
+    ///
+    /// TODO(#51): Use `ComputePassDescriptor::timestamp_writes`
     #[track_caller]
     pub fn scoped_compute_pass(
         &mut self,
@@ -242,6 +232,8 @@ impl<'a> Scope<'a, wgpu::CommandEncoder> {
 
 impl<'a> OwningScope<'a, wgpu::CommandEncoder> {
     /// Start a render pass wrapped in an [`OwningScope`].
+    ///
+    /// TODO(#51): Use `RenderPassDescriptor::timestamp_writes`
     #[track_caller]
     pub fn scoped_render_pass<'b>(
         &'b mut self,
@@ -260,6 +252,8 @@ impl<'a> OwningScope<'a, wgpu::CommandEncoder> {
     }
 
     /// Start a compute pass wrapped in a [`OwningScope`].
+    ///
+    /// TODO(#51): Use `ComputePassDescriptor::timestamp_writes`
     #[track_caller]
     pub fn scoped_compute_pass(
         &mut self,
@@ -280,6 +274,8 @@ impl<'a> OwningScope<'a, wgpu::CommandEncoder> {
 
 impl<'a> ManualOwningScope<'a, wgpu::CommandEncoder> {
     /// Start a render pass wrapped in an [`OwningScope`].
+    ///
+    /// TODO(#51): Use `RenderPassDescriptor::timestamp_writes`
     #[track_caller]
     pub fn scoped_render_pass<'b>(
         &'b mut self,
@@ -298,6 +294,8 @@ impl<'a> ManualOwningScope<'a, wgpu::CommandEncoder> {
     }
 
     /// Start a compute pass wrapped in an [`OwningScope`].
+    ///
+    /// TODO(#51): Use `ComputePassDescriptor::timestamp_writes`
     #[track_caller]
     pub fn scoped_compute_pass(
         &mut self,
