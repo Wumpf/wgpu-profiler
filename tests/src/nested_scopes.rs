@@ -144,18 +144,21 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
 
 #[test]
 fn nested_scopes_all_features() {
-    let (_, device, queue) = create_device(GpuProfiler::ALL_WGPU_TIMER_FEATURES);
+    let Ok((_, device, queue)) = create_device(GpuProfiler::ALL_WGPU_TIMER_FEATURES) else {
+        println!("Skipping test because device doesn't support timer features");
+        return;
+    };
     nested_scopes(&device, &queue);
 }
 
 #[test]
 fn nested_scopes_no_pass_features() {
-    let (_, device, queue) = create_device(wgpu::Features::TIMESTAMP_QUERY);
+    let (_, device, queue) = create_device(wgpu::Features::TIMESTAMP_QUERY).unwrap();
     nested_scopes(&device, &queue);
 }
 
 #[test]
 fn nested_scopes_no_features() {
-    let (_, device, queue) = create_device(wgpu::Features::empty());
+    let (_, device, queue) = create_device(wgpu::Features::empty()).unwrap();
     nested_scopes(&device, &queue);
 }

@@ -5,7 +5,7 @@ use super::create_device;
 // regression test for bug described in https://github.com/Wumpf/wgpu-profiler/pull/18
 #[test]
 fn handle_dropped_frames_gracefully() {
-    let (_, device, queue) = create_device(wgpu::Features::TIMESTAMP_QUERY);
+    let (_, device, queue) = create_device(wgpu::Features::TIMESTAMP_QUERY).unwrap();
 
     // max_num_pending_frames is one!
     let mut profiler = wgpu_profiler::GpuProfiler::new(GpuProfilerSettings {

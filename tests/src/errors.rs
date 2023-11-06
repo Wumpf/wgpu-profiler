@@ -18,7 +18,7 @@ fn invalid_pending_frame_count() {
 
 #[test]
 fn end_frame_unclosed_scope() {
-    let (_, device, _) = create_device(wgpu::Features::TIMESTAMP_QUERY);
+    let (_, device, _) = create_device(wgpu::Features::TIMESTAMP_QUERY).unwrap();
 
     let mut profiler = wgpu_profiler::GpuProfiler::new(GpuProfilerSettings::default()).unwrap();
     let unclosed_scope = {
@@ -44,7 +44,7 @@ fn end_frame_unclosed_scope() {
 
 #[test]
 fn end_frame_unresolved_scope() {
-    let (_, device, _) = create_device(wgpu::Features::TIMESTAMP_QUERY);
+    let (_, device, _) = create_device(wgpu::Features::TIMESTAMP_QUERY).unwrap();
 
     let mut profiler = wgpu_profiler::GpuProfiler::new(GpuProfilerSettings::default()).unwrap();
     {
@@ -68,7 +68,7 @@ fn end_frame_unresolved_scope() {
 
 #[test]
 fn change_settings_while_scope_open() {
-    let (_, device, _) = create_device(wgpu::Features::TIMESTAMP_QUERY);
+    let (_, device, _) = create_device(wgpu::Features::TIMESTAMP_QUERY).unwrap();
 
     let mut profiler = wgpu_profiler::GpuProfiler::new(GpuProfilerSettings::default()).unwrap();
 

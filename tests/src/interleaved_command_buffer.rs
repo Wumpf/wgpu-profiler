@@ -6,7 +6,7 @@ use super::create_device;
 
 #[test]
 fn interleaved_scopes() {
-    let (_, device, queue) = create_device(wgpu::Features::TIMESTAMP_QUERY);
+    let (_, device, queue) = create_device(wgpu::Features::TIMESTAMP_QUERY).unwrap();
 
     let mut profiler = GpuProfiler::new(GpuProfilerSettings::default()).unwrap();
 
@@ -60,7 +60,7 @@ fn interleaved_scopes() {
 
 #[test]
 fn multithreaded_scopes() {
-    let (_, device, queue) = create_device(wgpu::Features::TIMESTAMP_QUERY);
+    let (_, device, queue) = create_device(wgpu::Features::TIMESTAMP_QUERY).unwrap();
 
     let mut profiler = GpuProfiler::new(GpuProfilerSettings::default()).unwrap();
 

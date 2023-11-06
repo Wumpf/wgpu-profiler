@@ -1,12 +1,16 @@
+use wgpu::RequestDeviceError;
+
 mod dropped_frame_handling;
 mod errors;
 mod interleaved_command_buffer;
 mod nested_scopes;
 
-pub fn create_device(features: wgpu::Features) -> (wgpu::Backend, wgpu::Device, wgpu::Queue) {
+pub fn create_device(
+    features: wgpu::Features,
+) -> Result<(wgpu::Backend, wgpu::Device, wgpu::Queue), RequestDeviceError> {
     async fn create_default_device_async(
         features: wgpu::Features,
-    ) -> (wgpu::Backend, wgpu::Device, wgpu::Queue) {
+    ) -> Result<(wgpu::Backend, wgpu::Device, wgpu::Queue), RequestDeviceError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY, // Workaround for wgl having issues with parallel device destruction.
             ..Default::default()
@@ -23,9 +27,8 @@ pub fn create_device(features: wgpu::Features) -> (wgpu::Backend, wgpu::Device, 
                 },
                 None,
             )
-            .await
-            .unwrap();
-        (adapter.get_info().backend, device, queue)
+            .await?;
+        Ok((adapter.get_info().backend, device, queue))
     }
 
     futures_lite::future::block_on(create_default_device_async(features))
