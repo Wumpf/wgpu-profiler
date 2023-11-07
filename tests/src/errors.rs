@@ -64,6 +64,8 @@ fn end_frame_unresolved_scope() {
         profiler.resolve_queries(&mut encoder);
     }
     assert_eq!(profiler.end_frame(), Ok(()));
+
+    device.poll(wgpu::MaintainBase::Wait);
 }
 
 #[test]

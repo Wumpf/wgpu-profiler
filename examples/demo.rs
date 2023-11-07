@@ -316,7 +316,7 @@ fn draw(
             rpass.draw(0..6, 2..3);
 
             // Don't forget to end the scope.
-            // TODO: If you drop a manually created profiling scope without calling `end_scope` we'll panic if debug assertions are enabled.
+            // If you drop a manually created profiling scope without calling `end_scope` we'll panic if debug assertions are enabled.
             profiler.end_scope(&mut rpass, scope);
         }
         // Another manual variant, is to create a `ManualOwningScope` explicitly.
@@ -331,13 +331,13 @@ fn draw(
             rpass.draw(0..6, 3..4);
 
             // Don't forget to end the scope.
-            // TODO: If you drop a manually created profiling scope without calling `end_scope` we'll panic if debug assertions are enabled.
+            // If you drop a manually created profiling scope without calling `end_scope` we'll panic if debug assertions are enabled.
             // Ending a `ManualOwningScope` will return the pass or encoder it owned.
             rpass.end_scope()
         };
 
         // Don't forget to end the scope.
-        // TODO: If you drop a manually created profiling scope without calling `end_scope` we'll panic if debug assertions are enabled.
+        // If you drop a manually created profiling scope without calling `end_scope` we'll panic if debug assertions are enabled.
         profiler.end_scope(&mut rpass, pass_scope);
     }
 }

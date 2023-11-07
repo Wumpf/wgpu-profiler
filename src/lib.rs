@@ -151,10 +151,20 @@ pub struct GpuTimerScope {
 
     #[cfg(feature = "tracy")]
     tracy_scope: Option<tracy_client::GpuSpan>,
+
+    #[cfg(debug_assertions)]
+    was_closed: bool,
 }
 
-// TODO: drop impl that shouts at you if you don't end the scope
-
+#[cfg(debug_assertions)]
+impl Drop for GpuTimerScope {
+    fn drop(&mut self) {
+        assert!(
+            self.was_closed,
+            "Dropped GpuTimerScope without calling `GpuProfiler::end_scope` on it!"
+        );
+    }
+}
 /// Settings passed on initialization of [`GpuProfiler`].
 #[derive(Debug, Clone)]
 pub struct GpuProfilerSettings {
@@ -370,6 +380,8 @@ impl GpuProfiler {
             parent_handle: parent_scope.map(|s| s.handle),
             #[cfg(feature = "tracy")]
             tracy_scope: _tracy_scope,
+            #[cfg(debug_assertions)]
+            was_closed: false,
         }
     }
 
@@ -388,8 +400,13 @@ impl GpuProfiler {
     pub fn end_scope<Recorder: ProfilerCommandRecorder>(
         &self,
         encoder_or_pass: &mut Recorder,
-        #[cfg_attr(not(feature = "tracy"), allow(unused_mut))] mut open_scope: GpuTimerScope,
+        mut open_scope: GpuTimerScope,
     ) {
+        #[cfg(debug_assertions)]
+        {
+            open_scope.was_closed = true;
+        }
+
         if let Some(query) = &open_scope.query {
             encoder_or_pass.write_timestamp(&query.pool.query_set, query.begin_query_idx + 1);
 
@@ -508,6 +525,7 @@ impl GpuProfiler {
             return Err(EndFrameError::UnresolvedQueries(num_unresolved_queries));
         }
 
+        // Next time we create a new query pool, we want it to be at least as big to hold all queries of this frame.
         self.size_for_new_query_pools = self
             .size_for_new_query_pools
             .max(
@@ -749,19 +767,8 @@ impl GpuProfiler {
 
         scopes_with_same_parent
             .into_iter()
-            .filter_map(|scope| {
-                let GpuTimerScope {
-                    label,
-                    pid,
-                    tid,
-                    query,
-                    handle,
-                    parent_handle: _,
-                    #[cfg(feature = "tracy")]
-                    tracy_scope,
-                } = scope;
-
-                let Some(query) = query else {
+            .filter_map(|mut scope| {
+                let Some(query) = scope.query.take() else {
                     // Inactive scopes don't have any results or nested scopes with results.
                     // Currently, we drop them from the results completely.
                     // In the future we could still make them show up since they convey information like label & pid/tid.
@@ -785,23 +792,23 @@ impl GpuProfiler {
                 );
 
                 #[cfg(feature = "tracy")]
-                if let Some(tracy_scope) = tracy_scope {
+                if let Some(tracy_scope) = scope.tracy_scope.take() {
                     tracy_scope.upload_timestamp(start_raw as i64, end_raw as i64);
                 }
 
                 let nested_scopes = Self::process_timings_recursive(
                     timestamp_to_sec,
                     closed_scope_by_parent_handle,
-                    Some(handle),
+                    Some(scope.handle),
                 );
 
                 Some(GpuTimerScopeResult {
-                    label,
+                    label: std::mem::take(&mut scope.label),
                     time: (start_raw as f64 * timestamp_to_sec)
                         ..(end_raw as f64 * timestamp_to_sec),
                     nested_scopes,
-                    pid,
-                    tid,
+                    pid: scope.pid,
+                    tid: scope.tid,
                 })
             })
             .collect::<Vec<_>>()

@@ -58,7 +58,7 @@ pub enum EndFrameError {
     #[error(
         "Not all queries were resolved before ending a frame.\n
 Call `GpuProfiler::resolve_queries` after all profiling scopes have been closed and before ending the frame.\n
-There were still {0} queries unresolved"
+There were still {0} queries unresolved."
     )]
     UnresolvedQueries(u32),
 }
