@@ -324,13 +324,14 @@ impl GpuProfiler {
     /// If an [`wgpu::ComputePass`] or [`wgpu::RenderPass`] is passed but the [`wgpu::Device`]
     /// does not support [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES`], no scope will be opened.
     ///
+    /// In any case, the returned scope *must* be closed by calling [`GpuProfiler::end_scope`].
+    /// Dropping it without closing it will trigger a debug assertion.
+    ///
+    /// If [`GpuProfilerSettings::enable_debug_groups`] is true, a debug group will be pushed on the encoder or pass.
+    ///
     /// May allocate a new [`wgpu::QuerySet`] and [`wgpu::Buffer`] internally if necessary.
-    /// After the first call, the same [`wgpu::Device`] must be used with all subsequent calls
+    /// After the first call, the same [`wgpu::Device`] must be used with all subsequent calls to [`GpuProfiler`]
     /// (and all passed references to wgpu objects must originate from that device).
-    ///
-    /// See also [`GpuProfiler::end_scope`], [`wgpu_profiler!`]
-    ///
-    /// TODO: UPDATE DOCS
     #[track_caller]
     #[must_use]
     pub fn begin_scope<Recorder: ProfilerCommandRecorder>(
@@ -387,18 +388,12 @@ impl GpuProfiler {
         }
     }
 
-    /// Ends currently open debug & timer scope if any.
+    /// Ends passed scope.
     ///
-    /// Fails if no scope was previously opened.
-    /// Behavior is not defined if the last open scope was opened on a different encoder or pass.
+    /// Behavior is not defined if the last open scope was opened on a different encoder or pass than the one passed here.
     ///
-    /// If the previous call to `begin_scope` did not open a timer scope because it was not supported or disabled,
+    /// If the previous call to [`GpuProfiler::begin_scope`] did not open a timer scope because it was not supported or disabled,
     /// this call will do nothing (except closing the currently open debug scope if enabled).
-    ///
-    /// See also [`wgpu_profiler!`], [`GpuProfiler::begin_scope`]
-    ///
-    ///
-    /// TODO: UPDATE DOCS
     pub fn end_scope<Recorder: ProfilerCommandRecorder>(
         &self,
         encoder_or_pass: &mut Recorder,
