@@ -9,6 +9,7 @@ Simple profiler scopes for wgpu using timer queries
   * Allows nesting!
   * Can be disabled by runtime flag
   * Additionally generates debug markers 
+  * Thread-safe - can profile several command encoder/buffers in parallel
 * Internally creates pools of timer queries automatically
   * Does not need to know in advance how many queries/profiling scopes are needed
   * Caches up profiler-frames until results are available
@@ -26,10 +27,26 @@ use wgpu_profiler::{wgpu_profiler, GpuProfiler, GpuProfilerSettings};
 let mut profiler = GpuProfiler::new(GpuProfilerSettings::default());
 ```
 
-Using scopes is easiest with TODO:
-TODO:
+Now you can start creating profiler scopes:
+```rust
+// You can now open profiling scopes on any encoder or pass:
+let mut scope = profiler.scope("name of your scope", &mut encoder, &device);
 
-Note that `GpuProfiler` reads the device features - if your wgpu device doesn't have `wgpu::Features::TIMESTAMP_QUERY` enabled, it will automatically not attempt to emit any timer queries.
+// Scopes can be nested arbitrarily!
+let mut nested_scope = scope.scope("nested!", &device);
+
+// Scopes on encoders can be used to easily create profiled passes!
+let mut compute_pass = nested_scope.scoped_compute_pass("profiled compute", &device, &Default::default());
+
+// Scopes expose the underlying encoder or pass they wrap:
+compute_pass.set_pipeline(&pipeline);
+// ...
+
+// Scopes created this way are automatically closed when dropped.
+```
+
+`GpuProfiler` reads the device features on first use:
+if your wgpu device doesn't have `wgpu::Features::TIMESTAMP_QUERY` enabled, it won't attempt to emit any timer queries.
 Similarly, if `wgpu::Features::WRITE_TIMESTAMP_INSIDE_PASSES` is not present, no queries will be issued from inside passes.
 
 Wgpu-profiler needs to insert buffer copy commands, so when you're done with an encoder and won't do any more profiling scopes on it, you need to resolve the queries:
@@ -44,8 +61,7 @@ profiler.end_frame().unwrap();
 
 Retrieving the oldest available frame and writing it out to a chrome trace file.
 ```rust
-if let Some(profiling_data) = profiler.process_finished_frame() {
-    // You usually want to write to disk only under some condition, e.g. press of a key or button
+if let Some(profiling_data) = profiler.process_finished_frame(queue.get_timestamp_period()) {
     wgpu_profiler::chrometrace::write_chrometrace(std::path::Path::new("mytrace.json"), &profiling_data);
 }
 ```

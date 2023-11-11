@@ -242,10 +242,10 @@ fn draw(
     device: &wgpu::Device,
     render_pipeline: &wgpu::RenderPipeline,
 ) {
-    let mut scope = wgpu_profiler::Scope::start("rendering", profiler, encoder, device);
+    // Create a new profiling scope that we nest the other scopes in.
+    let mut scope = profiler.scope("rendering", encoder, device);
+    // For demonstration purposes we divide our scene into two render passes.
     {
-        // For demonstration purposes we divide our scene into two render passes.
-
         // Once we created a scope, we can use it to create nested scopes within.
         // Note that the resulting scope fully owns the render pass.
         // But just as before, it behaves like a transparent wrapper, so you can use it just like a normal render pass.

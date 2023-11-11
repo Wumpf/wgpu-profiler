@@ -26,6 +26,16 @@ use wgpu_profiler::*;
     # (instance, adapter, device, queue)
 # }
 # let (instance, adapter, device, queue) = futures_lite::future::block_on(wgpu_init());
+# let cs_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+#     label: None,
+#     source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!("../examples/compute_shader.wgsl"))),
+# });
+# let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+#        label: None,
+#        layout: None,
+#        module: &cs_module,
+#        entry_point: "main",
+#    });
 // ...
 
 let mut profiler = GpuProfiler::new(GpuProfilerSettings::default()).unwrap();
@@ -33,10 +43,22 @@ let mut profiler = GpuProfiler::new(GpuProfilerSettings::default()).unwrap();
 // ...
 
 # let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-// Using scopes is easiest with the wgpu_profiler::Scope struct:
 {
-    wgpu_profiler::Scope::start("name of your scope", &profiler, &mut encoder, &device);
-    // wgpu commands go here
+    // You can now open profiling scopes on any encoder or pass:
+    let mut scope = profiler.scope("name of your scope", &mut encoder, &device);
+
+    // Scopes can be nested arbitrarily!
+    let mut nested_scope = scope.scope("nested!", &device);
+
+    // Scopes on encoders can be used to easily create profiled passes!
+    let mut compute_pass = nested_scope.scoped_compute_pass("profiled compute", &device, &Default::default());
+
+
+    // Scopes expose the underlying encoder or pass they wrap:
+    compute_pass.set_pipeline(&pipeline);
+    // ...
+
+    // Scopes created this way are automatically closed when dropped.
 }
 
 // Wgpu-profiler needs to insert buffer copy commands.
