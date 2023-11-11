@@ -91,9 +91,10 @@ dual licensed as above, without any additional terms or conditions.
   * ⚠️ Includes many major breaking changes! ⚠️
   * `GpuProfiler` can now be with several command buffers interleaved or in parallel!
   * `GpuProfiler::begin_scope` returns a scope and `GpuProfiler::end_scope` consumes it again
-  * `Scope`/`ManualScope`/`OwningScope` are now all top-level in the `gpu_profiler` module
+  * `Scope`/`OwningScope`/`ManualScope`/ are now all top-level in the `gpu_profiler` module
   * nesting of profiling scopes is no longer done automatically: `GpuProfiler::begin_scope` now takes an optional reference to a parent scope
   * removed profiling macro (doesn't work well with the new nesting model)
+  * `GpuProfiler` can now directly create scope structs using `GpuProfiler::scope`/`owning_scope`
 * 0.15
   * update to wgpu 0.18, by @Zoxc in [#50](https://github.com/Wumpf/wgpu-profiler/pull/50)
   * sample & doc fixes, by @waywardmonkeys in [#41](https://github.com/Wumpf/wgpu-profiler/pull/41), [#44](https://github.com/Wumpf/wgpu-profiler/pull/44)
