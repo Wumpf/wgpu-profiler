@@ -18,7 +18,7 @@ fn handle_dropped_frames_gracefully() {
     for _ in 0..2 {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
         {
-            let _ = wgpu_profiler::Scope::start("testscope", &profiler, &mut encoder, &device);
+            let _ = profiler.scope("testscope", &mut encoder, &device);
         }
         profiler.resolve_queries(&mut encoder);
         profiler.end_frame().unwrap();

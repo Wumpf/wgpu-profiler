@@ -316,7 +316,65 @@ impl GpuProfiler {
         }
     }
 
-    /// Starts a new debug & timer scope on a given encoder or rendering/compute pass if enabled.
+    /// Starts a new profiler scope.
+    ///
+    /// To nest scopes inside this scope, call [`Scope::scope`] on the returned scope.
+    ///
+    /// If an [`wgpu::CommandEncoder`] is passed but the [`wgpu::Device`]
+    /// does not support [`wgpu::Features::TIMESTAMP_QUERY`], no gpu timer will be queried and the scope will
+    /// not show up in the final results.
+    /// If an [`wgpu::ComputePass`] or [`wgpu::RenderPass`] is passed but the [`wgpu::Device`]
+    /// does not support [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES`], no scope will be opened.
+    ///
+    /// If [`GpuProfilerSettings::enable_debug_groups`] is true, a debug group will be pushed on the encoder or pass.
+    ///
+    /// May allocate a new [`wgpu::QuerySet`] and [`wgpu::Buffer`] internally if necessary.
+    /// After the first call, the same [`wgpu::Device`] must be used with all subsequent calls to [`GpuProfiler`]
+    /// (and all passed references to wgpu objects must originate from that device).
+    ///
+    /// Scope is automatically closed on drop.
+    #[must_use]
+    #[track_caller]
+    #[inline]
+    pub fn scope<'a, Recorder: ProfilerCommandRecorder>(
+        &'a self,
+        label: impl Into<String>,
+        encoder_or_pass: &'a mut Recorder,
+        device: &wgpu::Device,
+    ) -> Scope<'a, Recorder> {
+        Scope::start(label, self, encoder_or_pass, device)
+    }
+
+    /// Starts a new profiler scope that takes ownership of the passed encoder or rendering/compute pass.
+    ///
+    /// To nest scopes inside this scope, call [`OwningScope::scope`] on the returned scope.
+    ///
+    /// If an [`wgpu::CommandEncoder`] is passed but the [`wgpu::Device`]
+    /// does not support [`wgpu::Features::TIMESTAMP_QUERY`], no gpu timer will be queried and the scope will
+    /// not show up in the final results.
+    /// If an [`wgpu::ComputePass`] or [`wgpu::RenderPass`] is passed but the [`wgpu::Device`]
+    /// does not support [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES`], no scope will be opened.
+    ///
+    /// If [`GpuProfilerSettings::enable_debug_groups`] is true, a debug group will be pushed on the encoder or pass.
+    ///
+    /// May allocate a new [`wgpu::QuerySet`] and [`wgpu::Buffer`] internally if necessary.
+    /// After the first call, the same [`wgpu::Device`] must be used with all subsequent calls to [`GpuProfiler`]
+    /// (and all passed references to wgpu objects must originate from that device).
+    ///
+    /// Scope is automatically closed on drop.
+    #[must_use]
+    #[track_caller]
+    #[inline]
+    pub fn owning_scope<'a, Recorder: ProfilerCommandRecorder>(
+        &'a self,
+        label: impl Into<String>,
+        encoder_or_pass: Recorder,
+        device: &wgpu::Device,
+    ) -> OwningScope<'a, Recorder> {
+        OwningScope::start(label, self, encoder_or_pass, device)
+    }
+
+    /// Starts a new debug & timer scope on a given encoder or rendering/compute pass if enabled that must be manually closed.
     ///
     /// If an [`wgpu::CommandEncoder`] is passed but the [`wgpu::Device`]
     /// does not support [`wgpu::Features::TIMESTAMP_QUERY`], no gpu timer will be queried and the scope will
@@ -326,6 +384,7 @@ impl GpuProfiler {
     ///
     /// In any case, the returned scope *must* be closed by calling [`GpuProfiler::end_scope`].
     /// Dropping it without closing it will trigger a debug assertion.
+    /// To do this automatically, use `GpuProfiler::scope`/`GpuProfiler::owning_scope` instead.
     ///
     /// If [`GpuProfilerSettings::enable_debug_groups`] is true, a debug group will be pushed on the encoder or pass.
     ///

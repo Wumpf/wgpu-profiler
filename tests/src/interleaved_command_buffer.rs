@@ -14,8 +14,8 @@ fn interleaved_scopes() {
     let mut encoder1 = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
 
     {
-        let mut e0_s0 = wgpu_profiler::Scope::start("e0_s0", &profiler, &mut encoder0, &device);
-        let mut e1_s0 = wgpu_profiler::Scope::start("e1_s0", &profiler, &mut encoder1, &device);
+        let mut e0_s0 = profiler.scope("e0_s0", &mut encoder0, &device);
+        let mut e1_s0 = profiler.scope("e1_s0", &mut encoder1, &device);
 
         drop(e0_s0.scope("e0_s0_s0", &device));
         drop(e0_s0.scope("e0_s0_s1", &device));
@@ -74,12 +74,7 @@ fn multithreaded_scopes() {
             barrier.wait();
 
             for i in 0..NUM_SCOPES_PER_THREAD {
-                drop(wgpu_profiler::Scope::start(
-                    &format!("e0_s{i}"),
-                    &profiler,
-                    &mut encoder,
-                    &device,
-                ));
+                let _ = profiler.scope(&format!("e0_s{i}"), &mut encoder, &device);
             }
             encoder.finish()
         });
@@ -89,12 +84,7 @@ fn multithreaded_scopes() {
             barrier.wait();
 
             for i in 0..NUM_SCOPES_PER_THREAD {
-                drop(wgpu_profiler::Scope::start(
-                    &format!("e1_s{i}"),
-                    &profiler,
-                    &mut encoder,
-                    &device,
-                ));
+                let _ = profiler.scope(&format!("e1_s{i}"), &mut encoder, &device);
             }
             encoder.finish()
         });

@@ -12,8 +12,7 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
     let mut encoder2 = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
 
     {
-        let mut outer_scope =
-            wgpu_profiler::Scope::start("e0_s0", &profiler, &mut encoder0, device);
+        let mut outer_scope = profiler.scope("e0_s0", &mut encoder0, device);
         {
             drop(outer_scope.scoped_compute_pass(
                 "e0_s0_c0",
@@ -39,7 +38,7 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
     }
     // Bunch of interleaved scopes on an encoder.
     {
-        let mut scope = wgpu_profiler::Scope::start("e1_s0", &profiler, &mut encoder1, device);
+        let mut scope = profiler.scope("e1_s0", &mut encoder1, device);
         {
             drop(scope.scope("e1_s0_s0", device));
             drop(scope.scope("e1_s0_s1", device));
@@ -49,12 +48,7 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
             }
         }
     }
-    drop(wgpu_profiler::Scope::start(
-        "e2_s0",
-        &profiler,
-        &mut encoder2,
-        device,
-    ));
+    drop(profiler.scope("e2_s0", &mut encoder2, device));
     {
         // Another scope, but with the profiler disabled which should be possible on the fly.
         profiler
@@ -63,7 +57,7 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
                 ..Default::default()
             })
             .unwrap();
-        let mut scope = wgpu_profiler::Scope::start("e2_s1", &profiler, &mut encoder0, device);
+        let mut scope = profiler.scope("e2_s1", &mut encoder0, device);
         {
             let mut scope = scope.scoped_compute_pass(
                 "e2_s1_c1",
