@@ -120,12 +120,9 @@ pub struct GpuTimerScopeResult {
     pub nested_scopes: Vec<GpuTimerScopeResult>,
 }
 
-/// Internal handle to building a tree of profiling scopes.
-type GpuTimerScopeTreeHandle = u32;
-
 /// An in-flight GPU timer scope.
 ///
-/// *Must* be closed by calling [`GpuProfiler::end_scope`] or delegated using [`OpenTimerScope::take`].
+/// *Must* be closed by calling [`GpuProfiler::end_scope`].
 /// Will cause debug assertion if dropped without being closed.
 ///
 /// Emitted by [`GpuProfiler::begin_scope`] and consumed by [`GpuProfiler::end_scope`].
@@ -146,12 +143,15 @@ pub struct GpuTimerScope {
     /// Handle which identifies this scope, used for building the tree of scopes.
     handle: GpuTimerScopeTreeHandle,
 
-    /// Which if any scope this is a child of.
-    parent_handle: Option<GpuTimerScopeTreeHandle>, // TODO: move out.
+    /// Which scope this scope is a child of.
+    parent_handle: GpuTimerScopeTreeHandle,
 
     #[cfg(feature = "tracy")]
     tracy_scope: Option<tracy_client::GpuSpan>,
 
+    /// For debugging only, tracks if the scope got closed already.
+    ///
+    /// Scopes aren't allowed to be dropped without being closed first.
     #[cfg(debug_assertions)]
     was_closed: bool,
 }
@@ -159,7 +159,7 @@ pub struct GpuTimerScope {
 #[cfg(debug_assertions)]
 impl Drop for GpuTimerScope {
     fn drop(&mut self) {
-        assert!(
+        debug_assert!(
             self.was_closed,
             "Dropped GpuTimerScope without calling `GpuProfiler::end_scope` on it!"
         );
@@ -340,9 +340,11 @@ impl GpuProfiler {
         device: &wgpu::Device,
         parent_scope: Option<&GpuTimerScope>,
     ) -> GpuTimerScope {
+        // Give opening/closing scopes acquire/release semantics:
+        // This way, we won't get any nasty surprises when observing zero open scopes.
         self.num_open_scopes.fetch_add(1, Ordering::Acquire);
-        let handle = self.next_scope_handle.fetch_add(1, Ordering::Relaxed);
 
+        let handle = self.next_scope_tree_handle();
         let label = label.into();
 
         if self.settings.enable_debug_groups {
@@ -377,7 +379,7 @@ impl GpuProfiler {
             tid: std::thread::current().id(),
             query,
             handle,
-            parent_handle: parent_scope.map(|s| s.handle),
+            parent_handle: parent_scope.map_or(ROOT_SCOPE_HANDLE, |s| s.handle),
             #[cfg(feature = "tracy")]
             tracy_scope: _tracy_scope,
             #[cfg(debug_assertions)]
@@ -400,23 +402,23 @@ impl GpuProfiler {
     pub fn end_scope<Recorder: ProfilerCommandRecorder>(
         &self,
         encoder_or_pass: &mut Recorder,
-        mut open_scope: GpuTimerScope,
+        mut scope: GpuTimerScope,
     ) {
         #[cfg(debug_assertions)]
         {
-            open_scope.was_closed = true;
+            scope.was_closed = true;
         }
 
-        if let Some(query) = &open_scope.query {
+        if let Some(query) = &scope.query {
             encoder_or_pass.write_timestamp(&query.pool.query_set, query.begin_query_idx + 1);
 
             #[cfg(feature = "tracy")]
-            if let Some(ref mut tracy_scope) = open_scope.tracy_scope {
+            if let Some(ref mut tracy_scope) = scope.tracy_scope {
                 tracy_scope.end_zone();
             }
         }
 
-        let send_result = self.active_frame.closed_scope_sender.send(open_scope);
+        let send_result = self.active_frame.closed_scope_sender.send(scope);
 
         // The only way we can fail sending the scope is if the receiver has been dropped.
         // Since it sits on `active_frame` as well, there's no way for this to happen!
@@ -501,12 +503,12 @@ impl GpuProfiler {
             mapped_buffers: Arc::new(AtomicU32::new(0)),
         };
 
-        for closed_scope in self.active_frame.closed_scope_receiver.get_mut().try_iter() {
+        for scope in self.active_frame.closed_scope_receiver.get_mut().try_iter() {
             new_pending_frame
                 .closed_scope_by_parent_handle
-                .entry(closed_scope.parent_handle)
+                .entry(scope.parent_handle)
                 .or_default()
-                .push(closed_scope);
+                .push(scope);
         }
 
         // All loads of pool.num_used_queries are Relaxed since we assume,
@@ -609,7 +611,7 @@ impl GpuProfiler {
             Self::process_timings_recursive(
                 timestamp_to_sec,
                 &mut frame.closed_scope_by_parent_handle,
-                None,
+                ROOT_SCOPE_HANDLE,
             )
         };
 
@@ -640,6 +642,18 @@ fn timestamp_write_supported<Recorder: ProfilerCommandRecorder>(
 }
 
 impl GpuProfiler {
+    fn next_scope_tree_handle(&self) -> GpuTimerScopeTreeHandle {
+        // Relaxed is fine, we just want a number that nobody uses this frame already.
+        let mut handle = self.next_scope_handle.fetch_add(1, Ordering::Relaxed);
+
+        // We don't ever expect to run out of handles during a single frame, but who knows how long the app runs.
+        while handle == ROOT_SCOPE_HANDLE {
+            handle = self.next_scope_handle.fetch_add(1, Ordering::Relaxed);
+        }
+
+        handle
+    }
+
     fn reset_and_cache_unused_query_pools(&mut self, mut discarded_pools: Vec<Arc<QueryPool>>) {
         let capacity_threshold = self.size_for_new_query_pools / 2;
         for pool in discarded_pools.drain(..) {
@@ -754,11 +768,8 @@ impl GpuProfiler {
 
     fn process_timings_recursive(
         timestamp_to_sec: f64,
-        closed_scope_by_parent_handle: &mut HashMap<
-            Option<GpuTimerScopeTreeHandle>,
-            Vec<GpuTimerScope>,
-        >,
-        parent_handle: Option<GpuTimerScopeTreeHandle>,
+        closed_scope_by_parent_handle: &mut HashMap<GpuTimerScopeTreeHandle, Vec<GpuTimerScope>>,
+        parent_handle: GpuTimerScopeTreeHandle,
     ) -> Vec<GpuTimerScopeResult> {
         let Some(scopes_with_same_parent) = closed_scope_by_parent_handle.remove(&parent_handle)
         else {
@@ -799,7 +810,7 @@ impl GpuProfiler {
                 let nested_scopes = Self::process_timings_recursive(
                     timestamp_to_sec,
                     closed_scope_by_parent_handle,
-                    Some(scope.handle),
+                    scope.handle,
                 );
 
                 Some(GpuTimerScopeResult {
@@ -888,6 +899,12 @@ struct PendingFramePools {
     unused_pools: Vec<QueryPool>,
 }
 
+/// Internal handle to building a tree of profiling scopes.
+type GpuTimerScopeTreeHandle = u32;
+
+/// Handle for the root scope.
+const ROOT_SCOPE_HANDLE: GpuTimerScopeTreeHandle = std::u32::MAX;
+
 struct ActiveFrame {
     query_pools: RwLock<PendingFramePools>,
 
@@ -904,7 +921,7 @@ struct ActiveFrame {
 
 struct PendingFrame {
     query_pools: Vec<Arc<QueryPool>>,
-    closed_scope_by_parent_handle: HashMap<Option<GpuTimerScopeTreeHandle>, Vec<GpuTimerScope>>,
+    closed_scope_by_parent_handle: HashMap<GpuTimerScopeTreeHandle, Vec<GpuTimerScope>>,
 
     /// Keeps track of the number of buffers in the query pool that have been mapped successfully.
     mapped_buffers: std::sync::Arc<std::sync::atomic::AtomicU32>,
