@@ -173,12 +173,6 @@ pub struct GpuTimerScope {
 
     #[cfg(feature = "tracy")]
     tracy_scope: Option<tracy_client::GpuSpan>,
-
-    /// For debugging only, tracks if the scope got closed already.
-    ///
-    /// Scopes aren't allowed to be dropped without being closed first.
-    #[cfg(debug_assertions)]
-    was_closed: bool,
 }
 
 impl GpuTimerScope {
@@ -207,17 +201,17 @@ impl GpuTimerScope {
                 end_of_pass_write_index: Some(query.start_query_idx + 1),
             })
     }
-}
 
-#[cfg(debug_assertions)]
-impl Drop for GpuTimerScope {
-    fn drop(&mut self) {
-        debug_assert!(
-            self.was_closed,
-            "Dropped GpuTimerScope without calling `GpuProfiler::end_scope` on it!"
-        );
+    /// Makes this scope a child of the passed scope.
+    #[inline]
+    pub fn with_parent(self, parent: Option<&GpuTimerScope>) -> Self {
+        Self {
+            parent_handle: parent.map_or(ROOT_SCOPE_HANDLE, |p| p.handle),
+            ..self
+        }
     }
 }
+
 /// Settings passed on initialization of [`GpuProfiler`].
 #[derive(Debug, Clone)]
 pub struct GpuProfilerSettings {
@@ -395,7 +389,7 @@ impl GpuProfiler {
         encoder_or_pass: &'a mut Recorder,
         device: &wgpu::Device,
     ) -> Scope<'a, Recorder> {
-        let scope = self.begin_scope(label, encoder_or_pass, device, None);
+        let scope = self.begin_scope(label, encoder_or_pass, device);
         Scope {
             profiler: self,
             recorder: encoder_or_pass,
@@ -425,7 +419,7 @@ impl GpuProfiler {
         mut encoder_or_pass: Recorder,
         device: &wgpu::Device,
     ) -> OwningScope<'a, Recorder> {
-        let scope = self.begin_scope(label, &mut encoder_or_pass, device, None);
+        let scope = self.begin_scope(label, &mut encoder_or_pass, device);
         OwningScope {
             profiler: self,
             recorder: encoder_or_pass,
@@ -458,7 +452,7 @@ impl GpuProfiler {
         mut encoder_or_pass: Recorder,
         device: &wgpu::Device,
     ) -> ManualOwningScope<'a, Recorder> {
-        let scope = self.begin_scope(label, &mut encoder_or_pass, device, None);
+        let scope = self.begin_scope(label, &mut encoder_or_pass, device);
         ManualOwningScope {
             profiler: self,
             recorder: encoder_or_pass,
@@ -486,10 +480,8 @@ impl GpuProfiler {
         label: impl Into<String>,
         encoder_or_pass: &mut Recorder,
         device: &wgpu::Device,
-        parent_scope: Option<&GpuTimerScope>,
     ) -> GpuTimerScope {
-        let mut scope =
-            self.begin_scope_internal(label.into(), encoder_or_pass, device, parent_scope);
+        let mut scope = self.begin_scope_internal(label.into(), encoder_or_pass, device);
         scope.query.as_mut().map(|query| {
             encoder_or_pass.write_timestamp(&query.pool.query_set, query.start_query_idx);
             query.usage_state = QueryPairUsageState::OnlyStartWritten;
@@ -511,9 +503,8 @@ impl GpuProfiler {
         label: impl Into<String>,
         encoder: &mut wgpu::CommandEncoder,
         device: &wgpu::Device,
-        parent_scope: Option<&GpuTimerScope>,
     ) -> GpuTimerScope {
-        let mut scope = self.begin_scope_internal(label.into(), encoder, device, parent_scope);
+        let mut scope = self.begin_scope_internal(label.into(), encoder, device);
         scope.query.as_mut().map(|query| {
             query.usage_state = QueryPairUsageState::ReservedForPassTimestampWrites;
         });
@@ -531,11 +522,6 @@ impl GpuProfiler {
         encoder_or_pass: &mut Recorder,
         mut scope: GpuTimerScope,
     ) {
-        #[cfg(debug_assertions)]
-        {
-            scope.was_closed = true;
-        }
-
         if let Some(query) = &mut scope.query {
             match query.usage_state {
                 QueryPairUsageState::Reserved => {
@@ -916,7 +902,6 @@ impl GpuProfiler {
         label: String,
         encoder_or_pass: &mut Recorder,
         device: &wgpu::Device,
-        parent_scope: Option<&GpuTimerScope>,
     ) -> GpuTimerScope {
         // Give opening/closing scopes acquire/release semantics:
         // This way, we won't get any nasty surprises when observing zero open scopes.
@@ -949,12 +934,10 @@ impl GpuProfiler {
             tid: std::thread::current().id(),
             query,
             handle,
-            parent_handle: parent_scope.map_or(ROOT_SCOPE_HANDLE, |s| s.handle),
+            parent_handle: ROOT_SCOPE_HANDLE,
             has_debug_group: false,
             #[cfg(feature = "tracy")]
             tracy_scope: _tracy_scope,
-            #[cfg(debug_assertions)]
-            was_closed: false,
         }
     }
 

@@ -23,7 +23,7 @@ fn end_frame_unclosed_scope() {
     let mut profiler = wgpu_profiler::GpuProfiler::new(GpuProfilerSettings::default()).unwrap();
     let unclosed_scope = {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-        let scope = profiler.begin_scope("open scope", &mut encoder, &device, None);
+        let scope = profiler.begin_scope("open scope", &mut encoder, &device);
         profiler.resolve_queries(&mut encoder);
         scope
     };
@@ -49,7 +49,7 @@ fn end_frame_unresolved_scope() {
     let mut profiler = wgpu_profiler::GpuProfiler::new(GpuProfilerSettings::default()).unwrap();
     {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-        let scope = profiler.begin_scope("open scope", &mut encoder, &device, None);
+        let scope = profiler.begin_scope("open scope", &mut encoder, &device);
         profiler.end_scope(&mut encoder, scope);
     }
 
@@ -75,7 +75,7 @@ fn change_settings_while_scope_open() {
     let mut profiler = wgpu_profiler::GpuProfiler::new(GpuProfilerSettings::default()).unwrap();
 
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-    let scope = profiler.begin_scope("open scope", &mut encoder, &device, None);
+    let scope = profiler.begin_scope("open scope", &mut encoder, &device);
 
     assert_eq!(
         profiler.change_settings(GpuProfilerSettings::default()),

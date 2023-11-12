@@ -83,7 +83,8 @@ macro_rules! impl_scope_ext {
                 let recorder: &mut R = &mut self.recorder;
                 let scope = self
                     .profiler
-                    .begin_scope(label, recorder, device, self.scope.as_ref());
+                    .begin_scope(label, recorder, device)
+                    .with_parent(self.scope.as_ref());
                 Scope {
                     profiler: self.profiler,
                     recorder,
@@ -107,12 +108,10 @@ macro_rules! impl_scope_ext {
                 device: &wgpu::Device,
                 pass_descriptor: wgpu::RenderPassDescriptor<'b, '_>,
             ) -> OwningScope<'b, wgpu::RenderPass<'b>> {
-                let child_scope = self.profiler.begin_pass_scope(
-                    label,
-                    &mut self.recorder,
-                    device,
-                    self.scope.as_ref(),
-                );
+                let child_scope = self
+                    .profiler
+                    .begin_pass_scope(label, &mut self.recorder, device)
+                    .with_parent(self.scope.as_ref());
                 let render_pass = self
                     .recorder
                     .begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -140,12 +139,10 @@ macro_rules! impl_scope_ext {
                 label: impl Into<String>,
                 device: &wgpu::Device,
             ) -> OwningScope<'b, wgpu::ComputePass<'b>> {
-                let child_scope = self.profiler.begin_pass_scope(
-                    label,
-                    &mut self.recorder,
-                    device,
-                    self.scope.as_ref(),
-                );
+                let child_scope = self
+                    .profiler
+                    .begin_pass_scope(label, &mut self.recorder, device)
+                    .with_parent(self.scope.as_ref());
 
                 let render_pass = self
                     .recorder
