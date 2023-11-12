@@ -179,7 +179,7 @@ impl GpuTimerScope {
     /// Use the reserved query for render pass timestamp writes if any.
     ///
     /// Use this only for a single render/compute pass, otherwise results will be overwritten.
-    pub fn render_pass_timestamp_writes<'a>(&'a self) -> Option<wgpu::RenderPassTimestampWrites> {
+    pub fn render_pass_timestamp_writes(&self) -> Option<wgpu::RenderPassTimestampWrites> {
         self.query
             .as_ref()
             .map(|query| wgpu::RenderPassTimestampWrites {
@@ -192,7 +192,7 @@ impl GpuTimerScope {
     /// Use the reserved query for compute pass timestamp writes if any.
     ///
     /// Use this only for a single render/compute pass, otherwise results will be overwritten.
-    pub fn compute_pass_timestamp_writes<'a>(&'a self) -> Option<wgpu::ComputePassTimestampWrites> {
+    pub fn compute_pass_timestamp_writes(&self) -> Option<wgpu::ComputePassTimestampWrites> {
         self.query
             .as_ref()
             .map(|query| wgpu::ComputePassTimestampWrites {
@@ -482,10 +482,10 @@ impl GpuProfiler {
         device: &wgpu::Device,
     ) -> GpuTimerScope {
         let mut scope = self.begin_scope_internal(label.into(), encoder_or_pass, device);
-        scope.query.as_mut().map(|query| {
+        if let Some(query) = &mut scope.query {
             encoder_or_pass.write_timestamp(&query.pool.query_set, query.start_query_idx);
             query.usage_state = QueryPairUsageState::OnlyStartWritten;
-        });
+        };
 
         if self.settings.enable_debug_groups {
             encoder_or_pass.push_debug_group(&scope.label);
@@ -498,16 +498,16 @@ impl GpuProfiler {
     /// TODO: proper doc
     /// TODO: highlevel methods for this?
     /// TODO: Naming needs a facelift - `GpuTimerScope` vs `Scope` is WEIRD!
-    pub fn begin_pass_scope<'a>(
+    pub fn begin_pass_scope(
         &self,
         label: impl Into<String>,
         encoder: &mut wgpu::CommandEncoder,
         device: &wgpu::Device,
     ) -> GpuTimerScope {
         let mut scope = self.begin_scope_internal(label.into(), encoder, device);
-        scope.query.as_mut().map(|query| {
+        if let Some(query) = &mut scope.query {
             query.usage_state = QueryPairUsageState::ReservedForPassTimestampWrites;
-        });
+        }
         scope
     }
 
