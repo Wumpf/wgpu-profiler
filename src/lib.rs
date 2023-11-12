@@ -105,7 +105,7 @@ mod scope;
 mod tracy;
 
 pub use errors::{CreationError, EndFrameError, SettingsError};
-pub use scope::{EncoderScopeExt as _, ManualOwningScope, OwningScope, Scope};
+pub use scope::{EncoderScopeExt as _, ManualOwningScope, OwningScope, Scope, ScopeExt as _};
 
 // ---------------
 

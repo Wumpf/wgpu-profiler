@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use wgpu_profiler::*;
+use wgpu_profiler::{GpuProfiler, GpuProfilerSettings, GpuTimerScopeResult};
 use winit::{
     event::{Event, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
