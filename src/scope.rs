@@ -202,139 +202,91 @@ impl<'a, W: ProfilerCommandRecorder> ManualOwningScope<'a, W> {
     }
 }
 
-impl<'a> Scope<'a, wgpu::CommandEncoder> {
+pub trait EncoderScopeExt<'a> {
+    fn access(
+        &mut self,
+    ) -> (
+        &GpuProfiler,
+        &mut wgpu::CommandEncoder,
+        Option<&GpuTimerScope>,
+    );
+
     /// Start a render pass wrapped in a [`OwningScope`].
     ///
-    /// TODO(#51): Use `RenderPassDescriptor::timestamp_writes`
+    /// Ignores passed `wgpu::RenderPassDescriptor::timestamp_writes` and replaces it with
+    /// `timestamp_writes` managed by `GpuProfiler`.
+    ///
+    /// Note that in order to take measurements, this does not require the
+    /// [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES`] feature, only [`wgpu::Features::TIMESTAMP_QUERY`].
     #[track_caller]
-    #[inline]
-    pub fn scoped_render_pass<'b>(
+    fn scoped_render_pass<'b>(
         &'b mut self,
         label: impl Into<String>,
         device: &wgpu::Device,
-        pass_descriptor: &wgpu::RenderPassDescriptor<'b, '_>,
-    ) -> OwningScope<'b, wgpu::RenderPass<'b>> {
-        let render_pass = self.recorder.begin_render_pass(pass_descriptor);
-        OwningScope::start_nested(
-            label,
-            self.profiler,
-            render_pass,
-            device,
-            self.scope.as_ref(),
-        )
+        pass_descriptor: wgpu::RenderPassDescriptor<'b, '_>,
+    ) -> OwningScope<'b, wgpu::RenderPass<'b>>
+    where
+        'a: 'b,
+    {
+        let (profiler, encoder, parent_scope) = self.access();
+        let child_scope = profiler.begin_pass_scope(label, encoder, device, parent_scope);
+        let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            timestamp_writes: child_scope.render_pass_timestamp_writes(),
+            ..pass_descriptor
+        });
+
+        OwningScope {
+            profiler,
+            recorder: render_pass,
+            scope: Some(child_scope),
+        }
     }
 
     /// Start a compute pass wrapped in a [`OwningScope`].
     ///
-    /// TODO(#51): Use `ComputePassDescriptor::timestamp_writes`
-    #[track_caller]
-    #[inline]
-    pub fn scoped_compute_pass(
-        &mut self,
-        label: impl Into<String>,
-        device: &wgpu::Device,
-        pass_descriptor: &wgpu::ComputePassDescriptor<'_>,
-    ) -> OwningScope<wgpu::ComputePass> {
-        let compute_pass = self.recorder.begin_compute_pass(pass_descriptor);
-        OwningScope::start_nested(
-            label,
-            self.profiler,
-            compute_pass,
-            device,
-            self.scope.as_ref(),
-        )
-    }
-}
-
-impl<'a> OwningScope<'a, wgpu::CommandEncoder> {
-    /// Start a render pass wrapped in an [`OwningScope`].
+    /// Uses passed label both for profiler scope and compute pass label.
+    /// `timestamp_writes` managed by `GpuProfiler`.
     ///
-    /// TODO(#51): Use `RenderPassDescriptor::timestamp_writes`
+    /// Note that in order to take measurements, this does not require the
+    /// [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES`] feature, only [`wgpu::Features::TIMESTAMP_QUERY`].
     #[track_caller]
-    #[inline]
-    pub fn scoped_render_pass<'b>(
+    fn scoped_compute_pass<'b>(
         &'b mut self,
         label: impl Into<String>,
         device: &wgpu::Device,
-        pass_descriptor: &wgpu::RenderPassDescriptor<'b, '_>,
-    ) -> OwningScope<'b, wgpu::RenderPass<'b>> {
-        let render_pass = self.recorder.begin_render_pass(pass_descriptor);
-        OwningScope::start_nested(
-            label,
-            self.profiler,
-            render_pass,
-            device,
-            self.scope.as_ref(),
-        )
-    }
+    ) -> OwningScope<'b, wgpu::ComputePass<'b>>
+    where
+        'a: 'b,
+    {
+        let (profiler, encoder, parent_scope) = self.access();
+        let child_scope = profiler.begin_pass_scope(label, encoder, device, parent_scope);
 
-    /// Start a compute pass wrapped in a [`OwningScope`].
-    ///
-    /// TODO(#51): Use `ComputePassDescriptor::timestamp_writes`
-    #[track_caller]
-    #[inline]
-    pub fn scoped_compute_pass(
-        &mut self,
-        label: impl Into<String>,
-        device: &wgpu::Device,
-        pass_descriptor: &wgpu::ComputePassDescriptor<'_>,
-    ) -> OwningScope<wgpu::ComputePass> {
-        let compute_pass = self.recorder.begin_compute_pass(pass_descriptor);
-        OwningScope::start_nested(
-            label,
-            self.profiler,
-            compute_pass,
-            device,
-            self.scope.as_ref(),
-        )
-    }
-}
+        let render_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some(&child_scope.label),
+            timestamp_writes: child_scope.compute_pass_timestamp_writes(),
+        });
 
-impl<'a> ManualOwningScope<'a, wgpu::CommandEncoder> {
-    /// Start a render pass wrapped in an [`OwningScope`].
-    ///
-    /// TODO(#51): Use `RenderPassDescriptor::timestamp_writes`
-    #[track_caller]
-    #[inline]
-    pub fn scoped_render_pass<'b>(
-        &'b mut self,
-        label: impl Into<String>,
-        device: &wgpu::Device,
-        pass_descriptor: &wgpu::RenderPassDescriptor<'b, '_>,
-    ) -> OwningScope<'b, wgpu::RenderPass<'b>> {
-        let render_pass = self.recorder.begin_render_pass(pass_descriptor);
-        OwningScope::start_nested(
-            label,
-            self.profiler,
-            render_pass,
-            device,
-            self.scope.as_ref(),
-        )
-    }
-
-    /// Start a compute pass wrapped in an [`OwningScope`].
-    ///
-    /// TODO(#51): Use `ComputePassDescriptor::timestamp_writes`
-    #[track_caller]
-    #[inline]
-    pub fn scoped_compute_pass(
-        &mut self,
-        label: impl Into<String>,
-        device: &wgpu::Device,
-        pass_descriptor: &wgpu::ComputePassDescriptor<'_>,
-    ) -> OwningScope<wgpu::ComputePass> {
-        let compute_pass = self.recorder.begin_compute_pass(pass_descriptor);
-        OwningScope::start_nested(
-            label,
-            self.profiler,
-            compute_pass,
-            device,
-            self.scope.as_ref(),
-        )
+        OwningScope {
+            profiler,
+            recorder: render_pass,
+            scope: Some(child_scope),
+        }
     }
 }
 
 // Scope
+impl<'a> EncoderScopeExt<'a> for Scope<'a, wgpu::CommandEncoder> {
+    fn access(
+        &mut self,
+    ) -> (
+        &GpuProfiler,
+        &mut wgpu::CommandEncoder,
+        Option<&GpuTimerScope>,
+    ) {
+        (self.profiler, self.recorder, self.scope.as_ref())
+    }
+}
+
 impl<'a, W: ProfilerCommandRecorder> std::ops::Deref for Scope<'a, W> {
     type Target = W;
 
@@ -361,6 +313,18 @@ impl<'a, W: ProfilerCommandRecorder> Drop for Scope<'a, W> {
 }
 
 // OwningScope
+impl<'a> EncoderScopeExt<'a> for OwningScope<'a, wgpu::CommandEncoder> {
+    fn access(
+        &mut self,
+    ) -> (
+        &GpuProfiler,
+        &mut wgpu::CommandEncoder,
+        Option<&GpuTimerScope>,
+    ) {
+        (self.profiler, &mut self.recorder, self.scope.as_ref())
+    }
+}
+
 impl<'a, W: ProfilerCommandRecorder> std::ops::Deref for OwningScope<'a, W> {
     type Target = W;
 
@@ -387,6 +351,18 @@ impl<'a, W: ProfilerCommandRecorder> Drop for OwningScope<'a, W> {
 }
 
 // ManualOwningScope
+impl<'a> EncoderScopeExt<'a> for ManualOwningScope<'a, wgpu::CommandEncoder> {
+    fn access(
+        &mut self,
+    ) -> (
+        &GpuProfiler,
+        &mut wgpu::CommandEncoder,
+        Option<&GpuTimerScope>,
+    ) {
+        (self.profiler, &mut self.recorder, self.scope.as_ref())
+    }
+}
+
 impl<'a, W: ProfilerCommandRecorder> std::ops::Deref for ManualOwningScope<'a, W> {
     type Target = W;
 

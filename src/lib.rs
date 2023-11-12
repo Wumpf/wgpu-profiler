@@ -105,7 +105,7 @@ mod scope;
 mod tracy;
 
 pub use errors::{CreationError, EndFrameError, SettingsError};
-pub use scope::{ManualOwningScope, OwningScope, Scope};
+pub use scope::{EncoderScopeExt as _, ManualOwningScope, OwningScope, Scope};
 
 // ---------------
 
@@ -168,6 +168,9 @@ pub struct GpuTimerScope {
     /// Which scope this scope is a child of.
     parent_handle: GpuTimerScopeTreeHandle,
 
+    /// Whether a debug group was opened for this scope.
+    has_debug_group: bool,
+
     #[cfg(feature = "tracy")]
     tracy_scope: Option<tracy_client::GpuSpan>,
 
@@ -176,6 +179,34 @@ pub struct GpuTimerScope {
     /// Scopes aren't allowed to be dropped without being closed first.
     #[cfg(debug_assertions)]
     was_closed: bool,
+}
+
+impl GpuTimerScope {
+    /// Use the reserved query for render pass timestamp writes if any.
+    ///
+    /// Use this only for a single render/compute pass, otherwise results will be overwritten.
+    pub fn render_pass_timestamp_writes<'a>(&'a self) -> Option<wgpu::RenderPassTimestampWrites> {
+        self.query
+            .as_ref()
+            .map(|query| wgpu::RenderPassTimestampWrites {
+                query_set: &query.pool.query_set,
+                beginning_of_pass_write_index: Some(query.start_query_idx),
+                end_of_pass_write_index: Some(query.start_query_idx + 1),
+            })
+    }
+
+    /// Use the reserved query for compute pass timestamp writes if any.
+    ///
+    /// Use this only for a single render/compute pass, otherwise results will be overwritten.
+    pub fn compute_pass_timestamp_writes<'a>(&'a self) -> Option<wgpu::ComputePassTimestampWrites> {
+        self.query
+            .as_ref()
+            .map(|query| wgpu::ComputePassTimestampWrites {
+                query_set: &query.pool.query_set,
+                beginning_of_pass_write_index: Some(query.start_query_idx),
+                end_of_pass_write_index: Some(query.start_query_idx + 1),
+            })
+    }
 }
 
 #[cfg(debug_assertions)]
@@ -319,13 +350,12 @@ impl GpuProfiler {
 
     /// Changes the settings of an existing profiler.
     ///
-    /// This fails if there are open profiling scopes.
-    ///
     /// If timer scopes are disabled (by setting [GpuProfilerSettings::enable_timer_scopes] to false),
     /// any timer queries that are in flight will still be processed,
     /// but unused query sets and buffers will be deallocated during [`Self::process_finished_frame`].
     pub fn change_settings(&mut self, settings: GpuProfilerSettings) -> Result<(), SettingsError> {
         if self.num_open_scopes.load(Ordering::Acquire) > 0 {
+            // TODO: we can allow this now, borrow checker takes care of all remaining issues.
             Err(SettingsError::HasOpenScopes)
         } else {
             settings.validate()?;
@@ -398,15 +428,16 @@ impl GpuProfiler {
 
     /// Starts a new debug & timer scope on a given encoder or rendering/compute pass if enabled that must be manually closed.
     ///
+    /// The returned scope *must* be closed by calling [`GpuProfiler::end_scope`].
+    /// Dropping it without closing it will trigger a debug assertion.
+    /// To do this automatically, use `GpuProfiler::scope`/`GpuProfiler::owning_scope` instead.
+    ///
     /// If an [`wgpu::CommandEncoder`] is passed but the [`wgpu::Device`]
     /// does not support [`wgpu::Features::TIMESTAMP_QUERY`], no gpu timer will be queried and the scope will
     /// not show up in the final results.
     /// If an [`wgpu::ComputePass`] or [`wgpu::RenderPass`] is passed but the [`wgpu::Device`]
     /// does not support [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES`], no scope will be opened.
     ///
-    /// In any case, the returned scope *must* be closed by calling [`GpuProfiler::end_scope`].
-    /// Dropping it without closing it will trigger a debug assertion.
-    /// To do this automatically, use `GpuProfiler::scope`/`GpuProfiler::owning_scope` instead.
     ///
     /// If [`GpuProfilerSettings::enable_debug_groups`] is true, a debug group will be pushed on the encoder or pass.
     ///
@@ -422,51 +453,34 @@ impl GpuProfiler {
         device: &wgpu::Device,
         parent_scope: Option<&GpuTimerScope>,
     ) -> GpuTimerScope {
-        // Give opening/closing scopes acquire/release semantics:
-        // This way, we won't get any nasty surprises when observing zero open scopes.
-        self.num_open_scopes.fetch_add(1, Ordering::Acquire);
-
-        let handle = self.next_scope_tree_handle();
-        let label = label.into();
+        let mut scope =
+            self.begin_scope_internal(label.into(), encoder_or_pass, device, parent_scope);
+        scope.query.as_mut().map(|query| {
+            encoder_or_pass.write_timestamp(&query.pool.query_set, query.start_query_idx);
+            query.usage_state = QueryPairUsageState::OnlyStartWritten;
+        });
 
         if self.settings.enable_debug_groups {
-            encoder_or_pass.push_debug_group(&label);
+            encoder_or_pass.push_debug_group(&scope.label);
+            scope.has_debug_group = true;
         }
+        scope
+    }
 
-        let (query, _tracy_scope) = if self.settings.enable_timer_scopes
-            && timestamp_write_supported(encoder_or_pass, device.features())
-        {
-            let query = self.reserve_query_pair(device);
-            encoder_or_pass.write_timestamp(&query.pool.query_set, query.begin_query_idx);
-
-            #[cfg(feature = "tracy")]
-            let tracy_scope = {
-                let location = std::panic::Location::caller();
-                self.tracy_context.as_ref().and_then(|c| {
-                    c.span_alloc(&label, "", location.file(), location.line())
-                        .ok()
-                })
-            };
-            #[cfg(not(feature = "tracy"))]
-            let tracy_scope = Option::<()>::None;
-
-            (Some(query), tracy_scope)
-        } else {
-            (None, None)
-        };
-
-        GpuTimerScope {
-            label,
-            pid: std::process::id(),
-            tid: std::thread::current().id(),
-            query,
-            handle,
-            parent_handle: parent_scope.map_or(ROOT_SCOPE_HANDLE, |s| s.handle),
-            #[cfg(feature = "tracy")]
-            tracy_scope: _tracy_scope,
-            #[cfg(debug_assertions)]
-            was_closed: false,
-        }
+    /// Need to call end scope with the encoder again, not the pass the scope is used with.
+    /// TODO: proper doc
+    pub fn begin_pass_scope<'a>(
+        &self,
+        label: impl Into<String>,
+        encoder: &mut wgpu::CommandEncoder,
+        device: &wgpu::Device,
+        parent_scope: Option<&GpuTimerScope>,
+    ) -> GpuTimerScope {
+        let mut scope = self.begin_scope_internal(label.into(), encoder, device, parent_scope);
+        scope.query.as_mut().map(|query| {
+            query.usage_state = QueryPairUsageState::ReservedForPassTimestampWrites;
+        });
+        scope
     }
 
     /// Ends passed scope.
@@ -485,8 +499,23 @@ impl GpuProfiler {
             scope.was_closed = true;
         }
 
-        if let Some(query) = &scope.query {
-            encoder_or_pass.write_timestamp(&query.pool.query_set, query.begin_query_idx + 1);
+        if let Some(query) = &mut scope.query {
+            match query.usage_state {
+                QueryPairUsageState::Reserved => {
+                    unreachable!("Scope has been reserved but isn't used for anything!")
+                }
+                QueryPairUsageState::ReservedForPassTimestampWrites => {
+                    // No need to do a timestamp write, this is handled by wgpu.
+                }
+                QueryPairUsageState::OnlyStartWritten => {
+                    encoder_or_pass
+                        .write_timestamp(&query.pool.query_set, query.start_query_idx + 1);
+                    query.usage_state = QueryPairUsageState::BothStartAndEndWritten;
+                }
+                QueryPairUsageState::BothStartAndEndWritten => {
+                    unreachable!("Scope has already been closed!")
+                }
+            }
 
             #[cfg(feature = "tracy")]
             if let Some(ref mut tracy_scope) = scope.tracy_scope {
@@ -494,15 +523,15 @@ impl GpuProfiler {
             }
         }
 
+        if scope.has_debug_group {
+            encoder_or_pass.pop_debug_group();
+        }
+
         let send_result = self.active_frame.closed_scope_sender.send(scope);
 
         // The only way we can fail sending the scope is if the receiver has been dropped.
         // Since it sits on `active_frame` as well, there's no way for this to happen!
         debug_assert!(send_result.is_ok());
-
-        if self.settings.enable_debug_groups {
-            encoder_or_pass.pop_debug_group();
-        }
 
         // Count scopes even if we haven't processed this one, makes experiences more consistent
         // if there's a lack of support for some queries.
@@ -775,7 +804,8 @@ impl GpuProfiler {
                     // We successfully acquired two queries!
                     return Some(ReservedQueryPair {
                         pool: pool.clone(),
-                        begin_query_idx: num_used_queries,
+                        start_query_idx: num_used_queries,
+                        usage_state: QueryPairUsageState::Reserved,
                     });
                 }
                 Err(updated) => {
@@ -842,6 +872,55 @@ impl GpuProfiler {
         }
     }
 
+    #[track_caller]
+    #[must_use]
+    fn begin_scope_internal<Recorder: ProfilerCommandRecorder>(
+        &self,
+        label: String,
+        encoder_or_pass: &mut Recorder,
+        device: &wgpu::Device,
+        parent_scope: Option<&GpuTimerScope>,
+    ) -> GpuTimerScope {
+        // Give opening/closing scopes acquire/release semantics:
+        // This way, we won't get any nasty surprises when observing zero open scopes.
+        self.num_open_scopes.fetch_add(1, Ordering::Acquire);
+
+        let handle = self.next_scope_tree_handle();
+
+        let (query, _tracy_scope) = if self.settings.enable_timer_scopes
+            && timestamp_write_supported(encoder_or_pass, device.features())
+        {
+            #[cfg(feature = "tracy")]
+            let tracy_scope = {
+                let location = std::panic::Location::caller();
+                self.tracy_context.as_ref().and_then(|c| {
+                    c.span_alloc(&label, "", location.file(), location.line())
+                        .ok()
+                })
+            };
+            #[cfg(not(feature = "tracy"))]
+            let tracy_scope = Option::<()>::None;
+
+            (Some(self.reserve_query_pair(device)), tracy_scope)
+        } else {
+            (None, None)
+        };
+
+        GpuTimerScope {
+            label,
+            pid: std::process::id(),
+            tid: std::thread::current().id(),
+            query,
+            handle,
+            parent_handle: parent_scope.map_or(ROOT_SCOPE_HANDLE, |s| s.handle),
+            has_debug_group: false,
+            #[cfg(feature = "tracy")]
+            tracy_scope: _tracy_scope,
+            #[cfg(debug_assertions)]
+            was_closed: false,
+        }
+    }
+
     fn process_timings_recursive(
         timestamp_to_sec: f64,
         closed_scope_by_parent_handle: &mut HashMap<GpuTimerScopeTreeHandle, Vec<GpuTimerScope>>,
@@ -864,7 +943,7 @@ impl GpuProfiler {
 
                 // Read timestamp from buffer.
                 // By design timestamps for start/end are consecutive.
-                let offset = (query.begin_query_idx * QUERY_SIZE) as u64;
+                let offset = (query.start_query_idx * QUERY_SIZE) as u64;
                 let buffer_slice = &query
                     .pool
                     .read_buffer
@@ -902,6 +981,21 @@ impl GpuProfiler {
     }
 }
 
+#[derive(PartialEq, Eq)]
+enum QueryPairUsageState {
+    /// Transitional state used upon creation.
+    Reserved,
+
+    /// Don't do manual timestamp writes, wgpu is expected to do them for us.
+    ReservedForPassTimestampWrites,
+
+    /// Start query has been used, end query is still available.
+    OnlyStartWritten,
+
+    /// Both start & end query have been used.
+    BothStartAndEndWritten,
+}
+
 struct ReservedQueryPair {
     /// QueryPool on which both start & end queries of the scope are done.
     ///
@@ -911,7 +1005,10 @@ struct ReservedQueryPair {
 
     /// Query index at which the scope begins.
     /// The query after this is reserved for the end of the scope.
-    begin_query_idx: u32,
+    start_query_idx: u32,
+
+    /// Current use of the query pair.
+    usage_state: QueryPairUsageState,
 }
 
 /// A pool of queries, consisting of a single queryset & buffer for query results.

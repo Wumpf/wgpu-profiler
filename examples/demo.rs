@@ -109,7 +109,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         height: size.height,
         // By using the Fifo mode we ensure that CPU waits for GPU, thus we won't have an arbitrary amount of frames in flight that may be discarded.
         // Profiler works just fine in any other mode, but keep in mind that this can mean that it would need to buffer up many more frames until the first results are back.
-        present_mode: wgpu::PresentMode::Fifo,
+        present_mode: wgpu::PresentMode::Immediate,
         alpha_mode: wgpu::CompositeAlphaMode::Auto,
         view_formats: vec![swapchain_format],
     };
@@ -252,7 +252,7 @@ fn draw(
         let mut rpass = scope.scoped_render_pass(
             "render pass top",
             device,
-            &wgpu::RenderPassDescriptor {
+            wgpu::RenderPassDescriptor {
                 label: None,
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view,
@@ -262,9 +262,7 @@ fn draw(
                         store: wgpu::StoreOp::Store,
                     },
                 })],
-                depth_stencil_attachment: None,
-                occlusion_query_set: None,
-                timestamp_writes: None,
+                ..Default::default()
             },
         );
 
@@ -284,6 +282,12 @@ fn draw(
     {
         // It's also possible to take timings by hand, manually calling `begin_scope` and `end_scope`.
         // This is generally not recommended as it's very easy to mess up by accident :)
+        let pass_scope = profiler.begin_pass_scope(
+            "render pass bottom",
+            scope.recorder,
+            device,
+            scope.scope.as_ref(),
+        );
         let mut rpass = scope
             .recorder
             .begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -298,14 +302,8 @@ fn draw(
                 })],
                 depth_stencil_attachment: None,
                 occlusion_query_set: None,
-                timestamp_writes: None,
+                timestamp_writes: pass_scope.render_pass_timestamp_writes(),
             });
-        let pass_scope = profiler.begin_scope(
-            "render pass bottom",
-            &mut rpass,
-            device,
-            scope.scope.as_ref(),
-        );
 
         rpass.set_pipeline(render_pipeline);
 
