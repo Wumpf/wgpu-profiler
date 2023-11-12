@@ -14,17 +14,9 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
     {
         let mut outer_scope = profiler.scope("e0_s0", &mut encoder0, device);
         {
-            drop(outer_scope.scoped_compute_pass(
-                "e0_s0_c0",
-                device,
-                &wgpu::ComputePassDescriptor::default(),
-            ));
+            drop(outer_scope.scoped_compute_pass("e0_s0_c0", device));
             {
-                let mut inner_scope = outer_scope.scoped_compute_pass(
-                    "e0_s0_c1",
-                    device,
-                    &wgpu::ComputePassDescriptor::default(),
-                );
+                let mut inner_scope = outer_scope.scoped_compute_pass("e0_s0_c1", device);
                 {
                     drop(inner_scope.scope("e0_s0_c1_s0", device));
                     let mut innermost_scope = inner_scope.scope("e0_s0_c1_s1", device);
@@ -59,11 +51,7 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
             .unwrap();
         let mut scope = profiler.scope("e2_s1", &mut encoder0, device);
         {
-            let mut scope = scope.scoped_compute_pass(
-                "e2_s1_c1",
-                device,
-                &wgpu::ComputePassDescriptor::default(),
-            );
+            let mut scope = scope.scoped_compute_pass("e2_s1_c1", device);
             drop(scope.scope("e2_s1_c1_s0", device));
         }
     }

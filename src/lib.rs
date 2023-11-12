@@ -105,7 +105,7 @@ mod scope;
 mod tracy;
 
 pub use errors::{CreationError, EndFrameError, SettingsError};
-pub use scope::{EncoderScopeExt as _, ManualOwningScope, OwningScope, Scope, ScopeExt as _};
+pub use scope::{ManualOwningScope, OwningScope, Scope};
 
 // ---------------
 
@@ -278,6 +278,11 @@ impl GpuProfilerSettings {
 ///
 /// You can have an arbitrary number of independent profiler instances per application/adapter.
 /// Manages all the necessary [`wgpu::QuerySet`] and [`wgpu::Buffer`] behind the scenes.
+///
+/// Any scope opening method may allocate a new [`wgpu::QuerySet`] and [`wgpu::Buffer`] internally if necessary.
+///
+/// After the first call that passes [`wgpu::Device`], the same device must be used with all subsequent
+/// calls to [`GpuProfiler`] and all passed references to wgpu objects must originate from that device.
 pub struct GpuProfiler {
     unused_pools: Vec<QueryPool>,
 
@@ -368,7 +373,7 @@ impl GpuProfiler {
         }
     }
 
-    /// Starts a new profiler scope.
+    /// Starts a new auto-closing profiler scope.
     ///
     /// To nest scopes inside this scope, call [`Scope::scope`] on the returned scope.
     ///
@@ -380,10 +385,6 @@ impl GpuProfiler {
     ///
     /// If [`GpuProfilerSettings::enable_debug_groups`] is true, a debug group will be pushed on the encoder or pass.
     ///
-    /// May allocate a new [`wgpu::QuerySet`] and [`wgpu::Buffer`] internally if necessary.
-    /// After the first call, the same [`wgpu::Device`] must be used with all subsequent calls to [`GpuProfiler`]
-    /// (and all passed references to wgpu objects must originate from that device).
-    ///
     /// Scope is automatically closed on drop.
     #[must_use]
     #[track_caller]
@@ -394,10 +395,15 @@ impl GpuProfiler {
         encoder_or_pass: &'a mut Recorder,
         device: &wgpu::Device,
     ) -> Scope<'a, Recorder> {
-        Scope::start(label, self, encoder_or_pass, device)
+        let scope = self.begin_scope(label, encoder_or_pass, device, None);
+        Scope {
+            profiler: self,
+            recorder: encoder_or_pass,
+            scope: Some(scope),
+        }
     }
 
-    /// Starts a new profiler scope that takes ownership of the passed encoder or rendering/compute pass.
+    /// Starts a new auto-closing profiler scope that takes ownership of the passed encoder or rendering/compute pass.
     ///
     /// To nest scopes inside this scope, call [`OwningScope::scope`] on the returned scope.
     ///
@@ -409,10 +415,6 @@ impl GpuProfiler {
     ///
     /// If [`GpuProfilerSettings::enable_debug_groups`] is true, a debug group will be pushed on the encoder or pass.
     ///
-    /// May allocate a new [`wgpu::QuerySet`] and [`wgpu::Buffer`] internally if necessary.
-    /// After the first call, the same [`wgpu::Device`] must be used with all subsequent calls to [`GpuProfiler`]
-    /// (and all passed references to wgpu objects must originate from that device).
-    ///
     /// Scope is automatically closed on drop.
     #[must_use]
     #[track_caller]
@@ -420,13 +422,51 @@ impl GpuProfiler {
     pub fn owning_scope<'a, Recorder: ProfilerCommandRecorder>(
         &'a self,
         label: impl Into<String>,
-        encoder_or_pass: Recorder,
+        mut encoder_or_pass: Recorder,
         device: &wgpu::Device,
     ) -> OwningScope<'a, Recorder> {
-        OwningScope::start(label, self, encoder_or_pass, device)
+        let scope = self.begin_scope(label, &mut encoder_or_pass, device, None);
+        OwningScope {
+            profiler: self,
+            recorder: encoder_or_pass,
+            scope: Some(scope),
+        }
     }
 
-    /// Starts a new debug & timer scope on a given encoder or rendering/compute pass if enabled that must be manually closed.
+    /// Starts a new **manually closed** profiler scope that takes ownership of the passed encoder or rendering/compute pass.
+    ///
+    /// Does NOT call [`GpuProfiler::end_scope()`] on drop.
+    /// This construct is just for completeness in cases where working with scopes is preferred but one can't rely on the Drop call in the right place.
+    /// This is useful when the owned value needs to be recovered after the end of the scope.
+    /// In particular, to submit a [`wgpu::CommandEncoder`] to a queue, ownership of the encoder is necessary.
+    ///
+    /// To nest scopes inside this scope, call [`ManualOwningScope::scope`] on the returned scope.
+    ///
+    /// If an [`wgpu::CommandEncoder`] is passed but the [`wgpu::Device`]
+    /// does not support [`wgpu::Features::TIMESTAMP_QUERY`], no gpu timer will be queried and the scope will
+    /// not show up in the final results.
+    /// If an [`wgpu::ComputePass`] or [`wgpu::RenderPass`] is passed but the [`wgpu::Device`]
+    /// does not support [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES`], no scope will be opened.
+    ///
+    /// If [`GpuProfilerSettings::enable_debug_groups`] is true, a debug group will be pushed on the encoder or pass.
+    #[must_use]
+    #[track_caller]
+    #[inline]
+    pub fn manual_owning_scope<'a, Recorder: ProfilerCommandRecorder>(
+        &'a self,
+        label: impl Into<String>,
+        mut encoder_or_pass: Recorder,
+        device: &wgpu::Device,
+    ) -> ManualOwningScope<'a, Recorder> {
+        let scope = self.begin_scope(label, &mut encoder_or_pass, device, None);
+        ManualOwningScope {
+            profiler: self,
+            recorder: encoder_or_pass,
+            scope: Some(scope),
+        }
+    }
+
+    /// Starts a new profiler scope on a given encoder or rendering/compute pass if enabled that must be manually closed.
     ///
     /// The returned scope *must* be closed by calling [`GpuProfiler::end_scope`].
     /// Dropping it without closing it will trigger a debug assertion.
@@ -438,12 +478,7 @@ impl GpuProfiler {
     /// If an [`wgpu::ComputePass`] or [`wgpu::RenderPass`] is passed but the [`wgpu::Device`]
     /// does not support [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES`], no scope will be opened.
     ///
-    ///
     /// If [`GpuProfilerSettings::enable_debug_groups`] is true, a debug group will be pushed on the encoder or pass.
-    ///
-    /// May allocate a new [`wgpu::QuerySet`] and [`wgpu::Buffer`] internally if necessary.
-    /// After the first call, the same [`wgpu::Device`] must be used with all subsequent calls to [`GpuProfiler`]
-    /// (and all passed references to wgpu objects must originate from that device).
     #[track_caller]
     #[must_use]
     pub fn begin_scope<Recorder: ProfilerCommandRecorder>(
@@ -469,6 +504,8 @@ impl GpuProfiler {
 
     /// Need to call end scope with the encoder again, not the pass the scope is used with.
     /// TODO: proper doc
+    /// TODO: highlevel methods for this?
+    /// TODO: Naming needs a facelift - `GpuTimerScope` vs `Scope` is WEIRD!
     pub fn begin_pass_scope<'a>(
         &self,
         label: impl Into<String>,

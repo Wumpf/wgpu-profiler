@@ -307,7 +307,7 @@ fn draw(
 
         rpass.set_pipeline(render_pipeline);
 
-        // The same works on subscopes within the pass.
+        // Similarly, you can manually manage nested scopes within a render pass.
         // Again, to do any actual timing, you need to enable wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES.
         {
             let scope = profiler.begin_scope("fractal 2", &mut rpass, device, Some(&pass_scope));
@@ -317,22 +317,23 @@ fn draw(
             // If you drop a manually created profiling scope without calling `end_scope` we'll panic if debug assertions are enabled.
             profiler.end_scope(&mut rpass, scope);
         }
-        // Another manual variant, is to create a `ManualOwningScope` explicitly.
-        let mut rpass = {
-            let mut rpass = wgpu_profiler::ManualOwningScope::start_nested(
-                "fractal 3",
-                profiler,
-                rpass,
-                device,
-                Some(&pass_scope),
-            );
-            rpass.draw(0..6, 3..4);
+        // TODO:
+        // Another variant is to use `ManualOwningScope`, forming a middle ground between no scope helpers and fully automatic scope closing.
+        // let mut rpass = {
+        //     let mut rpass = profiler.manual_owning_scope(label, encoder_or_pass, device)
+        //         "fractal 3",
+        //         profiler,
+        //         rpass,
+        //         device,
+        //         Some(&pass_scope),
+        //     );
+        //     rpass.draw(0..6, 3..4);
 
-            // Don't forget to end the scope.
-            // If you drop a manually created profiling scope without calling `end_scope` we'll panic if debug assertions are enabled.
-            // Ending a `ManualOwningScope` will return the pass or encoder it owned.
-            rpass.end_scope()
-        };
+        //     // Don't forget to end the scope.
+        //     // If you drop a manually created profiling scope without calling `end_scope` we'll panic if debug assertions are enabled.
+        //     // Ending a `ManualOwningScope` will return the pass or encoder it owned.
+        //     rpass.end_scope()
+        // };
 
         // Don't forget to end the scope.
         // If you drop a manually created profiling scope without calling `end_scope` we'll panic if debug assertions are enabled.
