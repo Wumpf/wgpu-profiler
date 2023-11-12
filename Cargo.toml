@@ -15,6 +15,7 @@ tracy = ["tracy-client", "profiling/profile-with-tracy"]
 [lib]
 
 [dependencies]
+parking_lot = "0.12" # Note that wgpu already depends on parking_lot as well, so this doesn't add much.
 thiserror = "1"
 tracy-client = { version = "0.16", optional = true }
 wgpu = "0.18"

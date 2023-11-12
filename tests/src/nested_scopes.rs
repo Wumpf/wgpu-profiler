@@ -1,41 +1,8 @@
-use wgpu_profiler::{scope::Scope, GpuProfiler, GpuProfilerSettings, GpuTimerScopeResult};
+use wgpu_profiler::{GpuProfiler, GpuProfilerSettings};
 
-mod utils;
+use crate::src::{expected_scope, validate_results, Requires};
 
-#[derive(Debug)]
-enum Requires {
-    Timestamps,
-    TimestampsInPasses,
-}
-
-#[derive(Debug)]
-struct ExpectedScope(&'static str, Requires, &'static [ExpectedScope]);
-
-fn validate_results(
-    features: wgpu::Features,
-    result: &[GpuTimerScopeResult],
-    expected: &[ExpectedScope],
-) {
-    let expected = expected
-        .iter()
-        .filter(|expected| match expected.1 {
-            Requires::Timestamps => features.contains(wgpu::Features::TIMESTAMP_QUERY),
-            Requires::TimestampsInPasses => {
-                features.contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES)
-            }
-        })
-        .collect::<Vec<_>>();
-
-    assert_eq!(
-        result.len(),
-        expected.len(),
-        "result: {result:?}\nexpected: {expected:?}"
-    );
-    for (result, expected) in result.iter().zip(expected.iter()) {
-        assert_eq!(result.label, expected.0);
-        validate_results(features, &result.nested_scopes, &expected.2);
-    }
-}
+use super::create_device;
 
 fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
     let mut profiler = GpuProfiler::new(GpuProfilerSettings::default()).unwrap();
@@ -45,31 +12,33 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
     let mut encoder2 = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
 
     {
-        let mut scope = Scope::start("e0_s0", &mut profiler, &mut encoder0, device);
+        let mut outer_scope = profiler.scope("e0_s0", &mut encoder0, device);
         {
-            drop(scope.scoped_compute_pass(
+            drop(outer_scope.scoped_compute_pass(
                 "e0_s0_c0",
                 device,
                 &wgpu::ComputePassDescriptor::default(),
             ));
-            let mut scope = scope.scoped_compute_pass(
-                "e0_s0_c1",
-                device,
-                &wgpu::ComputePassDescriptor::default(),
-            );
             {
-                drop(scope.scope("e0_s0_c1_s0", device));
-                let mut scope = scope.scope("e0_s0_c1_s1", device);
+                let mut inner_scope = outer_scope.scoped_compute_pass(
+                    "e0_s0_c1",
+                    device,
+                    &wgpu::ComputePassDescriptor::default(),
+                );
                 {
-                    let mut scope = scope.scope("e0_s0_c1_s1_s0", device);
-                    drop(scope.scope("e0_s0_c1_s1_s0_s0", device));
+                    drop(inner_scope.scope("e0_s0_c1_s0", device));
+                    let mut innermost_scope = inner_scope.scope("e0_s0_c1_s1", device);
+                    {
+                        let mut scope = innermost_scope.scope("e0_s0_c1_s1_s0", device);
+                        drop(scope.scope("e0_s0_c1_s1_s0_s0", device));
+                    }
                 }
             }
         }
     }
     // Bunch of interleaved scopes on an encoder.
     {
-        let mut scope = Scope::start("e1_s0", &mut profiler, &mut encoder1, device);
+        let mut scope = profiler.scope("e1_s0", &mut encoder1, device);
         {
             drop(scope.scope("e1_s0_s0", device));
             drop(scope.scope("e1_s0_s1", device));
@@ -79,7 +48,7 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
             }
         }
     }
-    drop(Scope::start("e2_s0", &mut profiler, &mut encoder2, device));
+    drop(profiler.scope("e2_s0", &mut encoder2, device));
     {
         // Another scope, but with the profiler disabled which should be possible on the fly.
         profiler
@@ -88,7 +57,7 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
                 ..Default::default()
             })
             .unwrap();
-        let mut scope = Scope::start("e2_s1", &mut profiler, &mut encoder0, device);
+        let mut scope = profiler.scope("e2_s1", &mut encoder0, device);
         {
             let mut scope = scope.scoped_compute_pass(
                 "e2_s1_c1",
@@ -110,32 +79,35 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
         .process_finished_frame(queue.get_timestamp_period())
         .unwrap();
 
+    // Print entire tree. Useful for debugging the test if it fails!
+    println!("{:#?}", frame);
+
     // Check if the frame gives us the expected nesting of timer scopes.
     validate_results(
         device.features(),
         &frame,
         &[
-            ExpectedScope(
+            expected_scope(
                 "e0_s0",
                 Requires::Timestamps,
-                &[
-                    ExpectedScope("e0_s0_c0", Requires::TimestampsInPasses, &[]),
-                    ExpectedScope(
+                [
+                    expected_scope("e0_s0_c0", Requires::TimestampsInPasses, []),
+                    expected_scope(
                         "e0_s0_c1",
                         Requires::TimestampsInPasses,
-                        &[
-                            ExpectedScope("e0_s0_c1_s0", Requires::TimestampsInPasses, &[]),
-                            ExpectedScope(
+                        [
+                            expected_scope("e0_s0_c1_s0", Requires::TimestampsInPasses, []),
+                            expected_scope(
                                 "e0_s0_c1_s1",
                                 Requires::TimestampsInPasses,
-                                &[ExpectedScope(
+                                [expected_scope(
                                     "e0_s0_c1_s1_s0",
                                     Requires::TimestampsInPasses,
-                                    &[
-                                        ExpectedScope(
+                                    [
+                                        expected_scope(
                                             "e0_s0_c1_s1_s0_s0",
                                             Requires::TimestampsInPasses,
-                                            &[],
+                                            [],
                                         ), //
                                     ],
                                 )],
@@ -144,42 +116,43 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
                     ),
                 ],
             ),
-            ExpectedScope(
+            expected_scope(
                 "e1_s0",
                 Requires::Timestamps,
-                &[
-                    ExpectedScope("e1_s0_s0", Requires::Timestamps, &[]),
-                    ExpectedScope("e1_s0_s1", Requires::Timestamps, &[]),
-                    ExpectedScope(
+                [
+                    expected_scope("e1_s0_s0", Requires::Timestamps, []),
+                    expected_scope("e1_s0_s1", Requires::Timestamps, []),
+                    expected_scope(
                         "e1_s0_s2",
                         Requires::Timestamps,
-                        &[
-                            ExpectedScope("e1_s0_s2_s0", Requires::Timestamps, &[]), //
+                        [
+                            expected_scope("e1_s0_s2_s0", Requires::Timestamps, []), //
                         ],
                     ),
                 ],
             ),
-            ExpectedScope("e2_s0", Requires::Timestamps, &[]),
+            expected_scope("e2_s0", Requires::Timestamps, []),
         ],
     );
 }
 
 #[test]
 fn nested_scopes_all_features() {
-    let (_, device, queue) = utils::create_device(GpuProfiler::ALL_WGPU_TIMER_FEATURES);
+    let Ok((_, device, queue)) = create_device(GpuProfiler::ALL_WGPU_TIMER_FEATURES) else {
+        println!("Skipping test because device doesn't support timer features");
+        return;
+    };
     nested_scopes(&device, &queue);
 }
 
 #[test]
 fn nested_scopes_no_pass_features() {
-    let (_, device, queue) = utils::create_device(wgpu::Features::TIMESTAMP_QUERY);
+    let (_, device, queue) = create_device(wgpu::Features::TIMESTAMP_QUERY).unwrap();
     nested_scopes(&device, &queue);
 }
 
 #[test]
 fn nested_scopes_no_features() {
-    let (_, device, queue) = utils::create_device(wgpu::Features::empty());
+    let (_, device, queue) = create_device(wgpu::Features::empty()).unwrap();
     nested_scopes(&device, &queue);
 }
-
-// TODO: interleaving of scope begin_end & multithreading is not yet possible!

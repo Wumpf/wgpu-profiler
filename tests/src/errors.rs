@@ -1,8 +1,6 @@
 use wgpu_profiler::GpuProfilerSettings;
 
-mod utils;
-
-use utils::create_device;
+use super::create_device;
 
 #[test]
 fn invalid_pending_frame_count() {
@@ -20,26 +18,25 @@ fn invalid_pending_frame_count() {
 
 #[test]
 fn end_frame_unclosed_scope() {
-    let (_, device, _) = create_device(wgpu::Features::TIMESTAMP_QUERY);
+    let (_, device, _) = create_device(wgpu::Features::TIMESTAMP_QUERY).unwrap();
 
     let mut profiler = wgpu_profiler::GpuProfiler::new(GpuProfilerSettings::default()).unwrap();
-    {
+    let unclosed_scope = {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-        profiler.begin_scope("open scope", &mut encoder, &device);
+        let scope = profiler.begin_scope("open scope", &mut encoder, &device, None);
         profiler.resolve_queries(&mut encoder);
-    }
+        scope
+    };
 
     assert_eq!(
         profiler.end_frame(),
-        Err(wgpu_profiler::EndFrameError::UnclosedScopes(vec![
-            "open scope".to_string()
-        ]))
+        Err(wgpu_profiler::EndFrameError::UnclosedScopes(1))
     );
 
     // Make sure we can recover from this.
     {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-        profiler.end_scope(&mut encoder).unwrap();
+        profiler.end_scope(&mut encoder, unclosed_scope);
         profiler.resolve_queries(&mut encoder);
     }
     assert_eq!(profiler.end_frame(), Ok(()));
@@ -47,13 +44,13 @@ fn end_frame_unclosed_scope() {
 
 #[test]
 fn end_frame_unresolved_scope() {
-    let (_, device, _) = create_device(wgpu::Features::TIMESTAMP_QUERY);
+    let (_, device, _) = create_device(wgpu::Features::TIMESTAMP_QUERY).unwrap();
 
     let mut profiler = wgpu_profiler::GpuProfiler::new(GpuProfilerSettings::default()).unwrap();
     {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-        profiler.begin_scope("open scope", &mut encoder, &device);
-        profiler.end_scope(&mut encoder).unwrap();
+        let scope = profiler.begin_scope("open scope", &mut encoder, &device, None);
+        profiler.end_scope(&mut encoder, scope);
     }
 
     assert_eq!(
@@ -67,41 +64,23 @@ fn end_frame_unresolved_scope() {
         profiler.resolve_queries(&mut encoder);
     }
     assert_eq!(profiler.end_frame(), Ok(()));
-}
 
-#[test]
-fn no_open_scope() {
-    let (_, device, _) = create_device(wgpu::Features::TIMESTAMP_QUERY);
-
-    let mut profiler = wgpu_profiler::GpuProfiler::new(GpuProfilerSettings::default()).unwrap();
-    {
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-        assert_eq!(
-            profiler.end_scope(&mut encoder),
-            Err(wgpu_profiler::ScopeError::NoOpenScope)
-        );
-    }
-    // Make sure we can recover from this.
-    {
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-        profiler.begin_scope("open scope", &mut encoder, &device);
-        assert_eq!(profiler.end_scope(&mut encoder), Ok(()));
-        profiler.resolve_queries(&mut encoder);
-    }
-    assert_eq!(profiler.end_frame(), Ok(()));
+    device.poll(wgpu::MaintainBase::Wait);
 }
 
 #[test]
 fn change_settings_while_scope_open() {
-    let (_, device, _) = create_device(wgpu::Features::TIMESTAMP_QUERY);
+    let (_, device, _) = create_device(wgpu::Features::TIMESTAMP_QUERY).unwrap();
 
     let mut profiler = wgpu_profiler::GpuProfiler::new(GpuProfilerSettings::default()).unwrap();
 
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-    profiler.begin_scope("open scope", &mut encoder, &device);
+    let scope = profiler.begin_scope("open scope", &mut encoder, &device, None);
 
     assert_eq!(
         profiler.change_settings(GpuProfilerSettings::default()),
         Err(wgpu_profiler::SettingsError::HasOpenScopes)
     );
+
+    profiler.end_scope(&mut encoder, scope);
 }

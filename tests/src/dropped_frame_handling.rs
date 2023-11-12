@@ -1,13 +1,11 @@
 use wgpu_profiler::GpuProfilerSettings;
 
-mod utils;
-
-use utils::create_device;
+use super::create_device;
 
 // regression test for bug described in https://github.com/Wumpf/wgpu-profiler/pull/18
 #[test]
 fn handle_dropped_frames_gracefully() {
-    let (_, device, queue) = create_device(wgpu::Features::TIMESTAMP_QUERY);
+    let (_, device, queue) = create_device(wgpu::Features::TIMESTAMP_QUERY).unwrap();
 
     // max_num_pending_frames is one!
     let mut profiler = wgpu_profiler::GpuProfiler::new(GpuProfilerSettings {
@@ -20,12 +18,7 @@ fn handle_dropped_frames_gracefully() {
     for _ in 0..2 {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
         {
-            let _ = wgpu_profiler::scope::Scope::start(
-                "testscope",
-                &mut profiler,
-                &mut encoder,
-                &device,
-            );
+            let _ = profiler.scope("testscope", &mut encoder, &device);
         }
         profiler.resolve_queries(&mut encoder);
         profiler.end_frame().unwrap();

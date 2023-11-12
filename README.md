@@ -9,6 +9,7 @@ Simple profiler scopes for wgpu using timer queries
   * Allows nesting!
   * Can be disabled by runtime flag
   * Additionally generates debug markers 
+  * Thread-safe - can profile several command encoder/buffers in parallel
 * Internally creates pools of timer queries automatically
   * Does not need to know in advance how many queries/profiling scopes are needed
   * Caches up profiler-frames until results are available
@@ -21,18 +22,31 @@ Simple profiler scopes for wgpu using timer queries
 
 Create a new profiler object:
 ```rust
-use wgpu_profiler::{wgpu_profiler, GpuProfiler};
+use wgpu_profiler::{wgpu_profiler, GpuProfiler, GpuProfilerSettings};
 // ...
-let mut profiler = GpuProfiler::new(&adapter, &device, &queue, 4); // buffer up to 4 frames
+let mut profiler = GpuProfiler::new(GpuProfilerSettings::default());
 ```
 
-Using scopes is easiest with the macro:
+Now you can start creating profiler scopes:
 ```rust
-wgpu_profiler!("name of your scope", &mut profiler, &mut encoder, &device, {
-  // wgpu commands go here
-});
+// You can now open profiling scopes on any encoder or pass:
+let mut scope = profiler.scope("name of your scope", &mut encoder, &device);
+
+// Scopes can be nested arbitrarily!
+let mut nested_scope = scope.scope("nested!", &device);
+
+// Scopes on encoders can be used to easily create profiled passes!
+let mut compute_pass = nested_scope.scoped_compute_pass("profiled compute", &device, &Default::default());
+
+// Scopes expose the underlying encoder or pass they wrap:
+compute_pass.set_pipeline(&pipeline);
+// ...
+
+// Scopes created this way are automatically closed when dropped.
 ```
-Note that `GpuProfiler` reads the device features - if your wgpu device doesn't have `wgpu::Features::TIMESTAMP_QUERY` enabled, it will automatically not attempt to emit any timer queries.
+
+`GpuProfiler` reads the device features on first use:
+if your wgpu device doesn't have `wgpu::Features::TIMESTAMP_QUERY` enabled, it won't attempt to emit any timer queries.
 Similarly, if `wgpu::Features::WRITE_TIMESTAMP_INSIDE_PASSES` is not present, no queries will be issued from inside passes.
 
 Wgpu-profiler needs to insert buffer copy commands, so when you're done with an encoder and won't do any more profiling scopes on it, you need to resolve the queries:
@@ -47,8 +61,7 @@ profiler.end_frame().unwrap();
 
 Retrieving the oldest available frame and writing it out to a chrome trace file.
 ```rust
-if let Some(profiling_data) = profiler.process_finished_frame() {
-    // You usually want to write to disk only under some condition, e.g. press of a key or button
+if let Some(profiling_data) = profiler.process_finished_frame(queue.get_timestamp_period()) {
     wgpu_profiler::chrometrace::write_chrometrace(std::path::Path::new("mytrace.json"), &profiling_data);
 }
 ```
@@ -74,6 +87,14 @@ for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
 
 ## Changelog
+* unreleased
+  * ⚠️ Includes many major breaking changes! ⚠️
+  * `GpuProfiler` can now be with several command buffers interleaved or in parallel!
+  * `GpuProfiler::begin_scope` returns a scope and `GpuProfiler::end_scope` consumes it again
+  * `Scope`/`OwningScope`/`ManualScope`/ are now all top-level in the `gpu_profiler` module
+  * nesting of profiling scopes is no longer done automatically: `GpuProfiler::begin_scope` now takes an optional reference to a parent scope
+  * removed profiling macro (doesn't work well with the new nesting model)
+  * `GpuProfiler` can now directly create scope structs using `GpuProfiler::scope`/`owning_scope`
 * 0.15
   * update to wgpu 0.18, by @Zoxc in [#50](https://github.com/Wumpf/wgpu-profiler/pull/50)
   * sample & doc fixes, by @waywardmonkeys in [#41](https://github.com/Wumpf/wgpu-profiler/pull/41), [#44](https://github.com/Wumpf/wgpu-profiler/pull/44)
