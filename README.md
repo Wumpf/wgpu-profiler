@@ -36,7 +36,7 @@ let mut scope = profiler.scope("name of your scope", &mut encoder, &device);
 let mut nested_scope = scope.scope("nested!", &device);
 
 // Scopes on encoders can be used to easily create profiled passes!
-let mut compute_pass = nested_scope.scoped_compute_pass("profiled compute", &device, &Default::default());
+let mut compute_pass = nested_scope.scoped_compute_pass("profiled compute", &device);
 
 // Scopes expose the underlying encoder or pass they wrap:
 compute_pass.set_pipeline(&pipeline);

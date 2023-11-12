@@ -79,10 +79,10 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
                 "e0_s0",
                 Requires::Timestamps,
                 [
-                    expected_scope("e0_s0_c0", Requires::TimestampsInPasses, []),
+                    expected_scope("e0_s0_c0", Requires::Timestamps, []),
                     expected_scope(
                         "e0_s0_c1",
-                        Requires::TimestampsInPasses,
+                        Requires::Timestamps,
                         [
                             expected_scope("e0_s0_c1_s0", Requires::TimestampsInPasses, []),
                             expected_scope(
