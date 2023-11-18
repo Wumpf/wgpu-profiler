@@ -349,22 +349,19 @@ impl GpuProfiler {
 
     /// Changes the settings of an existing profiler.
     ///
-    /// If timer scopes are disabled (by setting [GpuProfilerSettings::enable_timer_scopes] to false),
+    /// If timer scopes are disabled by setting [GpuProfilerSettings::enable_timer_scopes] to false,
     /// any timer queries that are in flight will still be processed,
     /// but unused query sets and buffers will be deallocated during [`Self::process_finished_frame`].
+    /// Similarly, any opened debugging scope will still be closed if debug groups are disabled by setting
+    /// [GpuProfilerSettings::enable_debug_groups] to false.
     pub fn change_settings(&mut self, settings: GpuProfilerSettings) -> Result<(), SettingsError> {
-        if self.num_open_scopes.load(Ordering::Acquire) > 0 {
-            // TODO: we can allow this now, borrow checker takes care of all remaining issues.
-            Err(SettingsError::HasOpenScopes)
-        } else {
-            settings.validate()?;
-            if !settings.enable_timer_scopes {
-                self.unused_pools.clear();
-            }
-            self.settings = settings;
-
-            Ok(())
+        settings.validate()?;
+        if !settings.enable_timer_scopes {
+            self.unused_pools.clear();
         }
+        self.settings = settings;
+
+        Ok(())
     }
 
     /// Starts a new auto-closing profiler scope.

@@ -44,9 +44,6 @@ impl Eq for CreationError {}
 pub enum SettingsError {
     #[error("GpuProfilerSettings::max_num_pending_frames must be at least 1.")]
     InvalidMaxNumPendingFrames,
-
-    #[error("Can't change settings while there's open profiling scopes.")]
-    HasOpenScopes,
 }
 
 /// Errors that can occur during [`crate::GpuProfiler::end_frame`].

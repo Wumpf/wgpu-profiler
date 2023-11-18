@@ -79,7 +79,7 @@ fn change_settings_while_scope_open() {
 
     assert_eq!(
         profiler.change_settings(GpuProfilerSettings::default()),
-        Err(wgpu_profiler::SettingsError::HasOpenScopes)
+        Ok(())
     );
 
     profiler.end_scope(&mut encoder, scope);
