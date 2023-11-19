@@ -1,12 +1,12 @@
 use std::borrow::Cow;
-use wgpu_profiler::{GpuProfiler, GpuProfilerSettings, GpuTimerScopeResult};
+use wgpu_profiler::{GpuProfiler, GpuProfilerSettings, GpuTimerQueryResult};
 use winit::{
     event::{Event, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::Window,
 };
 
-fn scopes_to_console_recursive(results: &[GpuTimerScopeResult], indentation: u32) {
+fn scopes_to_console_recursive(results: &[GpuTimerQueryResult], indentation: u32) {
     for scope in results {
         if indentation > 0 {
             print!("{:<width$}", "|", width = 4);
@@ -18,13 +18,13 @@ fn scopes_to_console_recursive(results: &[GpuTimerScopeResult], indentation: u32
             scope.label
         );
 
-        if !scope.nested_scopes.is_empty() {
-            scopes_to_console_recursive(&scope.nested_scopes, indentation + 1);
+        if !scope.nested_queries.is_empty() {
+            scopes_to_console_recursive(&scope.nested_queries, indentation + 1);
         }
     }
 }
 
-fn console_output(results: &Option<Vec<GpuTimerScopeResult>>, enabled_features: wgpu::Features) {
+fn console_output(results: &Option<Vec<GpuTimerQueryResult>>, enabled_features: wgpu::Features) {
     profiling::scope!("console_output");
     print!("\x1B[2J\x1B[1;1H"); // Clear terminal and put cursor to first row first column
     println!("Welcome to wgpu_profiler demo!");
@@ -283,7 +283,7 @@ fn draw(
         // It's also possible to take timings by hand, manually calling `begin_scope` and `end_scope`.
         // This is generally not recommended as it's very easy to mess up by accident :)
         let pass_scope = profiler
-            .begin_pass_scope("render pass bottom", scope.recorder, device)
+            .begin_pass_query("render pass bottom", scope.recorder, device)
             .with_parent(scope.scope.as_ref());
         let mut rpass = scope
             .recorder
@@ -307,13 +307,13 @@ fn draw(
         // Similarly, you can manually manage nested scopes within a render pass.
         // Again, to do any actual timing, you need to enable wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES.
         {
-            let scope = profiler
-                .begin_scope("fractal 2", &mut rpass, device)
+            let query = profiler
+                .begin_query("fractal 2", &mut rpass, device)
                 .with_parent(Some(&pass_scope));
             rpass.draw(0..6, 2..3);
 
-            // Don't forget to end the scope!
-            profiler.end_scope(&mut rpass, scope);
+            // Don't forget to end the query!
+            profiler.end_query(&mut rpass, query);
         }
         // TODO:
         // Another variant is to use `ManualOwningScope`, forming a middle ground between no scope helpers and fully automatic scope closing.
@@ -333,7 +333,7 @@ fn draw(
         // };
 
         // Don't forget to end the scope.
-        profiler.end_scope(&mut rpass, pass_scope);
+        profiler.end_query(&mut rpass, pass_scope);
     }
 }
 

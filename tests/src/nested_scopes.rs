@@ -45,7 +45,7 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
         // Another scope, but with the profiler disabled which should be possible on the fly.
         profiler
             .change_settings(GpuProfilerSettings {
-                enable_timer_scopes: false,
+                enable_timer_queries: false,
                 ..Default::default()
             })
             .unwrap();

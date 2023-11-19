@@ -53,7 +53,7 @@ fn expected_scope(
 
 fn validate_results(
     features: wgpu::Features,
-    result: &[wgpu_profiler::GpuTimerScopeResult],
+    result: &[wgpu_profiler::GpuTimerQueryResult],
     expected: &[ExpectedScope],
 ) {
     let expected = expected
@@ -73,13 +73,13 @@ fn validate_results(
     );
     for (result, expected) in result.iter().zip(expected.iter()) {
         assert_eq!(result.label, expected.0);
-        validate_results(features, &result.nested_scopes, &expected.2);
+        validate_results(features, &result.nested_queries, &expected.2);
     }
 }
 
 fn validate_results_unordered(
     features: wgpu::Features,
-    result: &[wgpu_profiler::GpuTimerScopeResult],
+    result: &[wgpu_profiler::GpuTimerQueryResult],
     expected: &[ExpectedScope],
 ) {
     let expected = expected
@@ -104,6 +104,6 @@ fn validate_results_unordered(
 
     for (result, expected) in result.iter().zip(expected.iter()) {
         assert!(expected_labels.remove(&result.label));
-        validate_results(features, &result.nested_scopes, &expected.2);
+        validate_results(features, &result.nested_queries, &expected.2);
     }
 }

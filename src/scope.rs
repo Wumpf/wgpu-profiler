@@ -1,7 +1,7 @@
 //! Scope types that wrap a `wgpu` encoder/pass and start a scope on creation. In most cases, they
 //! then allow automatically ending the scope on drop.
 
-use crate::{GpuProfiler, GpuTimerScope, ProfilerCommandRecorder};
+use crate::{GpuProfiler, GpuProfilerQuery, ProfilerCommandRecorder};
 
 /// Scope that takes a (mutable) reference to the encoder/pass.
 ///
@@ -9,14 +9,14 @@ use crate::{GpuProfiler, GpuTimerScope, ProfilerCommandRecorder};
 pub struct Scope<'a, Recorder: ProfilerCommandRecorder> {
     pub profiler: &'a GpuProfiler,
     pub recorder: &'a mut Recorder,
-    pub scope: Option<GpuTimerScope>,
+    pub scope: Option<GpuProfilerQuery>,
 }
 
 impl<'a, R: ProfilerCommandRecorder> Drop for Scope<'a, R> {
     #[inline]
     fn drop(&mut self) {
         if let Some(scope) = self.scope.take() {
-            self.profiler.end_scope(self.recorder, scope);
+            self.profiler.end_query(self.recorder, scope);
         }
     }
 }
@@ -27,14 +27,14 @@ impl<'a, R: ProfilerCommandRecorder> Drop for Scope<'a, R> {
 pub struct OwningScope<'a, Recorder: ProfilerCommandRecorder> {
     pub profiler: &'a GpuProfiler,
     pub recorder: Recorder,
-    pub scope: Option<GpuTimerScope>,
+    pub scope: Option<GpuProfilerQuery>,
 }
 
 impl<'a, R: ProfilerCommandRecorder> Drop for OwningScope<'a, R> {
     #[inline]
     fn drop(&mut self) {
         if let Some(scope) = self.scope.take() {
-            self.profiler.end_scope(&mut self.recorder, scope);
+            self.profiler.end_query(&mut self.recorder, scope);
         }
     }
 }
@@ -48,7 +48,7 @@ impl<'a, R: ProfilerCommandRecorder> Drop for OwningScope<'a, R> {
 pub struct ManualOwningScope<'a, Recorder: ProfilerCommandRecorder> {
     pub profiler: &'a GpuProfiler,
     pub recorder: Recorder,
-    pub scope: Option<GpuTimerScope>,
+    pub scope: Option<GpuProfilerQuery>,
 }
 
 impl<'a, R: ProfilerCommandRecorder> ManualOwningScope<'a, R> {
@@ -58,7 +58,7 @@ impl<'a, R: ProfilerCommandRecorder> ManualOwningScope<'a, R> {
     pub fn end_scope(mut self) -> R {
         // Can't fail since creation implies begin_scope.
         self.profiler
-            .end_scope(&mut self.recorder, self.scope.take().unwrap());
+            .end_query(&mut self.recorder, self.scope.take().unwrap());
         self.recorder
     }
 }
@@ -83,7 +83,7 @@ macro_rules! impl_scope_ext {
                 let recorder: &mut R = &mut self.recorder;
                 let scope = self
                     .profiler
-                    .begin_scope(label, recorder, device)
+                    .begin_query(label, recorder, device)
                     .with_parent(self.scope.as_ref());
                 Scope {
                     profiler: self.profiler,
@@ -110,7 +110,7 @@ macro_rules! impl_scope_ext {
             ) -> OwningScope<'b, wgpu::RenderPass<'b>> {
                 let child_scope = self
                     .profiler
-                    .begin_pass_scope(label, &mut self.recorder, device)
+                    .begin_pass_query(label, &mut self.recorder, device)
                     .with_parent(self.scope.as_ref());
                 let render_pass = self
                     .recorder
@@ -141,7 +141,7 @@ macro_rules! impl_scope_ext {
             ) -> OwningScope<'b, wgpu::ComputePass<'b>> {
                 let child_scope = self
                     .profiler
-                    .begin_pass_scope(label, &mut self.recorder, device)
+                    .begin_pass_query(label, &mut self.recorder, device)
                     .with_parent(self.scope.as_ref());
 
                 let render_pass = self
