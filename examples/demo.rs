@@ -315,22 +315,15 @@ fn draw(
             // Don't forget to end the query!
             profiler.end_query(&mut rpass, query);
         }
-        // TODO:
         // Another variant is to use `ManualOwningScope`, forming a middle ground between no scope helpers and fully automatic scope closing.
-        // let mut rpass = {
-        //     let mut rpass = profiler.manual_owning_scope(label, encoder_or_pass, device)
-        //         "fractal 3",
-        //         profiler,
-        //         rpass,
-        //         device,
-        //         Some(&pass_scope),
-        //     );
-        //     rpass.draw(0..6, 3..4);
+        let mut rpass = {
+            let mut rpass = profiler.manual_owning_scope("fractal 3", rpass, device);
+            rpass.draw(0..6, 3..4);
 
-        //     // Don't forget to end the scope.
-        //     // Ending a `ManualOwningScope` will return the pass or encoder it owned.
-        //     rpass.end_query()
-        // };
+            // Don't forget to end the scope.
+            // Ending a `ManualOwningScope` will return the pass or encoder it owned.
+            rpass.end_query()
+        };
 
         // Don't forget to end the scope.
         profiler.end_query(&mut rpass, pass_scope);
