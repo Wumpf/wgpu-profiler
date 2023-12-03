@@ -14,17 +14,9 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
     {
         let mut outer_scope = profiler.scope("e0_s0", &mut encoder0, device);
         {
-            drop(outer_scope.scoped_compute_pass(
-                "e0_s0_c0",
-                device,
-                &wgpu::ComputePassDescriptor::default(),
-            ));
+            drop(outer_scope.scoped_compute_pass("e0_s0_c0", device));
             {
-                let mut inner_scope = outer_scope.scoped_compute_pass(
-                    "e0_s0_c1",
-                    device,
-                    &wgpu::ComputePassDescriptor::default(),
-                );
+                let mut inner_scope = outer_scope.scoped_compute_pass("e0_s0_c1", device);
                 {
                     drop(inner_scope.scope("e0_s0_c1_s0", device));
                     let mut innermost_scope = inner_scope.scope("e0_s0_c1_s1", device);
@@ -53,17 +45,13 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
         // Another scope, but with the profiler disabled which should be possible on the fly.
         profiler
             .change_settings(GpuProfilerSettings {
-                enable_timer_scopes: false,
+                enable_timer_queries: false,
                 ..Default::default()
             })
             .unwrap();
         let mut scope = profiler.scope("e2_s1", &mut encoder0, device);
         {
-            let mut scope = scope.scoped_compute_pass(
-                "e2_s1_c1",
-                device,
-                &wgpu::ComputePassDescriptor::default(),
-            );
+            let mut scope = scope.scoped_compute_pass("e2_s1_c1", device);
             drop(scope.scope("e2_s1_c1_s0", device));
         }
     }
@@ -91,10 +79,10 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
                 "e0_s0",
                 Requires::Timestamps,
                 [
-                    expected_scope("e0_s0_c0", Requires::TimestampsInPasses, []),
+                    expected_scope("e0_s0_c0", Requires::Timestamps, []),
                     expected_scope(
                         "e0_s0_c1",
-                        Requires::TimestampsInPasses,
+                        Requires::Timestamps,
                         [
                             expected_scope("e0_s0_c1_s0", Requires::TimestampsInPasses, []),
                             expected_scope(

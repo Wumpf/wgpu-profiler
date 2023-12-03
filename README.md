@@ -36,7 +36,7 @@ let mut scope = profiler.scope("name of your scope", &mut encoder, &device);
 let mut nested_scope = scope.scope("nested!", &device);
 
 // Scopes on encoders can be used to easily create profiled passes!
-let mut compute_pass = nested_scope.scoped_compute_pass("profiled compute", &device, &Default::default());
+let mut compute_pass = nested_scope.scoped_compute_pass("profiled compute", &device);
 
 // Scopes expose the underlying encoder or pass they wrap:
 compute_pass.set_pipeline(&pipeline);
@@ -90,9 +90,9 @@ dual licensed as above, without any additional terms or conditions.
 * unreleased
   * ⚠️ Includes many major breaking changes! ⚠️
   * `GpuProfiler` can now be with several command buffers interleaved or in parallel!
-  * `GpuProfiler::begin_scope` returns a scope and `GpuProfiler::end_scope` consumes it again
-  * `Scope`/`OwningScope`/`ManualScope`/ are now all top-level in the `gpu_profiler` module
-  * nesting of profiling scopes is no longer done automatically: `GpuProfiler::begin_scope` now takes an optional reference to a parent scope
+    * `Scope`/`OwningScope`/`ManualScope`/ are now all top-level in the `gpu_profiler` module. `GpuProfiler` has utilities to create them directly.
+  * `GpuProfiler::begin_query` returns a query and `GpuProfiler::end_query` consumes it again
+  * nesting of profiling scopes is no longer done automatically: To manually associate a `GpuProfilerQuery` with a parent, use `GpuProfilerQuery::with_parent`
   * removed profiling macro (doesn't work well with the new nesting model)
   * `GpuProfiler` can now directly create scope structs using `GpuProfiler::scope`/`owning_scope`
 * 0.15

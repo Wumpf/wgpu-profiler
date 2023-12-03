@@ -1,11 +1,11 @@
 use std::{fs::File, io::Write, path::Path};
 
-use crate::GpuTimerScopeResult;
+use crate::GpuTimerQueryResult;
 
 /// Writes a .json trace file that can be viewed as a flame graph in Chrome or Edge via <chrome://tracing>
 pub fn write_chrometrace(
     target: &Path,
-    profile_data: &[GpuTimerScopeResult],
+    profile_data: &[GpuTimerQueryResult],
 ) -> std::io::Result<()> {
     let mut file = File::create(target)?;
 
@@ -27,7 +27,7 @@ pub fn write_chrometrace(
 
 fn write_results_recursive(
     file: &mut File,
-    result: &GpuTimerScopeResult,
+    result: &GpuTimerQueryResult,
     last: bool,
 ) -> std::io::Result<()> {
     // note: ThreadIds are under the control of Rust’s standard library
@@ -52,24 +52,24 @@ fn write_results_recursive(
         result.time.start * 1000.0 * 1000.0,
         (result.time.end - result.time.start) * 1000.0 * 1000.0,
         result.label,
-        if last && result.nested_scopes.is_empty() {
+        if last && result.nested_queries.is_empty() {
             "\n"
         } else {
             ",\n"
         }
     )?;
-    if result.nested_scopes.is_empty() {
+    if result.nested_queries.is_empty() {
         return Ok(());
     }
 
     for child in result
-        .nested_scopes
+        .nested_queries
         .iter()
-        .take(result.nested_scopes.len() - 1)
+        .take(result.nested_queries.len() - 1)
     {
         write_results_recursive(file, child, false)?;
     }
-    write_results_recursive(file, result.nested_scopes.last().unwrap(), last)?;
+    write_results_recursive(file, result.nested_queries.last().unwrap(), last)?;
 
     Ok(())
     // { "pid":1, "tid":1, "ts":546867, "dur":121564, "ph":"X", "name":"DoThings"

@@ -44,20 +44,17 @@ impl Eq for CreationError {}
 pub enum SettingsError {
     #[error("GpuProfilerSettings::max_num_pending_frames must be at least 1.")]
     InvalidMaxNumPendingFrames,
-
-    #[error("Can't change settings while there's open profiling scopes.")]
-    HasOpenScopes,
 }
 
 /// Errors that can occur during [`crate::GpuProfiler::end_frame`].
 #[derive(thiserror::Error, Debug, PartialEq, Eq)]
 pub enum EndFrameError {
-    #[error("All profiling scopes need to be closed before ending a frame. There were still {0} open scopes.")]
-    UnclosedScopes(u32),
+    #[error("All profiling queries need to be closed before ending a frame. There were still {0} open queries.")]
+    UnclosedQueries(u32),
 
     #[error(
         "Not all queries were resolved before ending a frame.\n
-Call `GpuProfiler::resolve_queries` after all profiling scopes have been closed and before ending the frame.\n
+Call `GpuProfiler::resolve_queries` after all profiling queries have been closed and before ending the frame.\n
 There were still {0} queries unresolved."
     )]
     UnresolvedQueries(u32),
