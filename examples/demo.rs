@@ -280,7 +280,7 @@ fn draw(
         }
     }
     {
-        // It's also possible to take timings by hand, manually calling `begin_scope` and `end_scope`.
+        // It's also possible to take timings by hand, manually calling `begin_query` and `end_query`.
         // This is generally not recommended as it's very easy to mess up by accident :)
         let pass_scope = profiler
             .begin_pass_query("render pass bottom", scope.recorder, device)
@@ -329,7 +329,7 @@ fn draw(
 
         //     // Don't forget to end the scope.
         //     // Ending a `ManualOwningScope` will return the pass or encoder it owned.
-        //     rpass.end_scope()
+        //     rpass.end_query()
         // };
 
         // Don't forget to end the scope.

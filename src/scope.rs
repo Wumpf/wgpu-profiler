@@ -5,7 +5,7 @@ use crate::{GpuProfiler, GpuProfilerQuery, ProfilerCommandRecorder};
 
 /// Scope that takes a (mutable) reference to the encoder/pass.
 ///
-/// Calls [`GpuProfiler::end_scope()`] on drop.
+/// Calls [`GpuProfiler::end_query()`] on drop.
 pub struct Scope<'a, Recorder: ProfilerCommandRecorder> {
     pub profiler: &'a GpuProfiler,
     pub recorder: &'a mut Recorder,
@@ -23,7 +23,7 @@ impl<'a, R: ProfilerCommandRecorder> Drop for Scope<'a, R> {
 
 /// Scope that takes ownership of the encoder/pass.
 ///
-/// Calls [`GpuProfiler::end_scope()`] on drop.
+/// Calls [`GpuProfiler::end_query()`] on drop.
 pub struct OwningScope<'a, Recorder: ProfilerCommandRecorder> {
     pub profiler: &'a GpuProfiler,
     pub recorder: Recorder,
@@ -41,7 +41,7 @@ impl<'a, R: ProfilerCommandRecorder> Drop for OwningScope<'a, R> {
 
 /// Scope that takes ownership of the encoder/pass.
 ///
-/// Does NOT call [`GpuProfiler::end_scope()`] on drop.
+/// Does NOT call [`GpuProfiler::end_query()`] on drop.
 /// This construct is just for completeness in cases where working with scopes is preferred but one can't rely on the Drop call in the right place.
 /// This is useful when the owned value needs to be recovered after the end of the scope.
 /// In particular, to submit a [`wgpu::CommandEncoder`] to a queue, ownership of the encoder is necessary.
@@ -55,8 +55,8 @@ impl<'a, R: ProfilerCommandRecorder> ManualOwningScope<'a, R> {
     /// Ends the scope allowing the extraction of the owned [`ProfilerCommandRecorder`].
     #[track_caller]
     #[inline]
-    pub fn end_scope(mut self) -> R {
-        // Can't fail since creation implies begin_scope.
+    pub fn end_query(mut self) -> R {
+        // Can't fail since creation implies begin_query.
         self.profiler
             .end_query(&mut self.recorder, self.scope.take().unwrap());
         self.recorder

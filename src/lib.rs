@@ -502,7 +502,7 @@ impl GpuProfiler {
     /// Starts a new profiler query to be used for render/compute pass timestamp writes.
     ///
     /// The returned query *must* be closed by calling [`GpuProfiler::end_query`], even if timer queries are disabled.
-    /// To do this automatically, use [`GpuProfiler::Scope::scoped_render_pass`]/[`GpuProfiler::Scope::scoped_compute_pass`] instead.
+    /// To do this automatically, use [`Scope::scoped_render_pass`]/[`Scope::scoped_compute_pass`] instead.
     ///
     /// Call [`GpuProfilerQuery::render_pass_timestamp_writes`] or [`GpuProfilerQuery::compute_pass_timestamp_writes`]
     /// to acquire the corresponding `wgpu::RenderPassTimestampWrites`/`wgpu::ComputePassTimestampWrites` object.
