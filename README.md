@@ -89,7 +89,7 @@ dual licensed as above, without any additional terms or conditions.
 ## Changelog
 * unreleased
   * ⚠️ Includes many major breaking changes! ⚠️
-  * `GpuProfiler` can now be with several command buffers interleaved or in parallel!
+  * `GpuProfiler` can now be used with several command buffers interleaved or in parallel!
     * `Scope`/`OwningScope`/`ManualScope`/ are now all top-level in the `gpu_profiler` module. `GpuProfiler` has utilities to create them directly.
   * `GpuProfiler::begin_query` returns a query and `GpuProfiler::end_query` consumes it again
   * nesting of profiling scopes is no longer done automatically: To manually associate a `GpuProfilerQuery` with a parent, use `GpuProfilerQuery::with_parent`
