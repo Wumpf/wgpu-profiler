@@ -1,6 +1,6 @@
 use crate::CreationError;
 
-pub(crate) fn create_tracy_gpu_client(
+pub fn create_tracy_gpu_client(
     backend: wgpu::Backend,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
@@ -13,14 +13,14 @@ pub(crate) fn create_tracy_gpu_client(
 
     let resolve_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("wgpu-profiler gpu -> cpu resolve buffer"),
-        size: crate::QUERY_SIZE as _,
+        size: wgpu::QUERY_SIZE as _,
         usage: wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC,
         mapped_at_creation: false,
     });
 
     let map_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("wgpu-profiler gpu -> cpu map buffer"),
-        size: crate::QUERY_SIZE as _,
+        size: wgpu::QUERY_SIZE as _,
         usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
         mapped_at_creation: false,
     });
@@ -30,7 +30,7 @@ pub(crate) fn create_tracy_gpu_client(
     });
     encoder.write_timestamp(&query_set, 0);
     encoder.resolve_query_set(&query_set, 0..1, &resolve_buffer, 0);
-    encoder.copy_buffer_to_buffer(&resolve_buffer, 0, &map_buffer, 0, crate::QUERY_SIZE as _);
+    encoder.copy_buffer_to_buffer(&resolve_buffer, 0, &map_buffer, 0, wgpu::QUERY_SIZE as _);
     queue.submit(Some(encoder.finish()));
 
     map_buffer.slice(..).map_async(wgpu::MapMode::Read, |_| ());
