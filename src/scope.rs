@@ -192,7 +192,7 @@ impl<'a, W: ProfilerCommandRecorder> ManualOwningScope<'a, W> {
     }
 
     /// Ends the scope allowing the extraction of the owned [`ProfilerCommandRecorder`]
-    /// and the mutable reference to the [`GpuProfiler`].
+    /// and the reference to the [`GpuProfiler`].
     #[track_caller]
     pub fn end_scope(mut self) -> (W, &'a GpuProfiler) {
         // Can't fail since creation implies begin_scope.
