@@ -37,7 +37,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         c = vec2<f32>(-0.12, -0.77);
     }
 
-    var max_iter: u32 = 200u;
+    var max_iter: u32 = 400000u;
     var z: vec2<f32> = (in.coord.xy - vec2<f32>(0.5, 0.5)) * 3.0;
 
     var i: u32 = 0u;

@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, time::Instant};
 use wgpu_profiler::{GpuProfiler, GpuProfilerSettings, GpuTimerQueryResult};
 use winit::{
     event::{Event, WindowEvent},
@@ -27,7 +27,7 @@ fn scopes_to_console_recursive(results: &[GpuTimerQueryResult], indentation: u32
 
 fn console_output(results: &Option<Vec<GpuTimerQueryResult>>, enabled_features: wgpu::Features) {
     profiling::scope!("console_output");
-    print!("\x1B[2J\x1B[1;1H"); // Clear terminal and put cursor to first row first column
+    //print!("\x1B[2J\x1B[1;1H"); // Clear terminal and put cursor to first row first column
     println!("Welcome to wgpu_profiler demo!");
     println!();
     println!("Enabled device features: {:?}", enabled_features);
@@ -46,7 +46,10 @@ fn console_output(results: &Option<Vec<GpuTimerQueryResult>>, enabled_features: 
 
 async fn run(event_loop: EventLoop<()>, window: Window) {
     let size = window.inner_size();
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::DX12,
+        ..Default::default()
+    });
     let surface =
         unsafe { instance.create_surface_from_raw(&window) }.expect("Failed to create surface.");
     let adapter = instance
@@ -109,7 +112,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         format: swapchain_format,
         width: size.width,
         height: size.height,
-        desired_maximum_frame_latency: 2,
+        desired_maximum_frame_latency: 1,
         // By using the Fifo mode we ensure that CPU waits for GPU, thus we won't have an arbitrary amount of frames in flight that may be discarded.
         // Profiler works just fine in any other mode, but keep in mind that this can mean that it would need to buffer up many more frames until the first results are back.
         present_mode: wgpu::PresentMode::Fifo,
@@ -141,6 +144,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         GpuProfiler::new(GpuProfilerSettings::default()).expect("Failed to create profiler");
 
     let mut latest_profiler_results = None;
+    let mut last_frame = Instant::now();
 
     event_loop
         .run(move |event, target| {
@@ -173,6 +177,13 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 } => {
                     profiling::scope!("Redraw Requested");
 
+                    let current_frame = Instant::now();
+                    println!(
+                        "Time since last frame: {:?}ms",
+                        (current_frame - last_frame).as_secs_f32() * 1000.0
+                    );
+                    last_frame = current_frame;
+
                     let frame = surface
                         .get_current_texture()
                         .expect("Failed to acquire next surface texture");
@@ -181,6 +192,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                         .create_view(&wgpu::TextureViewDescriptor::default());
                     let mut encoder = device
                         .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+
+                    std::thread::sleep(std::time::Duration::from_millis(30));
 
                     draw(
                         &profiler,
