@@ -1,6 +1,6 @@
 [package]
 name = "wgpu-profiler"
-version = "0.15.0"
+version = "0.16.0"
 authors = ["Andreas Reich <r_andreas2@web.de>"]
 edition = "2021"
 description = "Simple profiler scopes for wgpu using timer queries"
@@ -15,13 +15,13 @@ tracy = ["tracy-client", "profiling/profile-with-tracy"]
 [lib]
 
 [dependencies]
-parking_lot = "0.12" # Note that wgpu already depends on parking_lot as well, so this doesn't add much.
+parking_lot = "0.12"                                 # Note that wgpu already depends on parking_lot as well, so this doesn't add much.
 thiserror = "1"
 tracy-client = { version = "0.16", optional = true }
-wgpu = "0.18"
+wgpu = "0.19"
 
 [dev-dependencies]
-futures-lite = "1"
+futures-lite = "2"
 profiling = { version = "1" }
 tracy-client = "0.16.1"
-winit = "0.28"
+winit = "0.29"

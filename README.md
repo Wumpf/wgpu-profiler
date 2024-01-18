@@ -87,7 +87,8 @@ for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
 
 ## Changelog
-* unreleased
+* 0.16
+  * update to wgpu 0.19
   * ⚠️ Includes many major breaking changes! ⚠️
   * `GpuProfiler` can now be used with several command buffers interleaved or in parallel!
     * `Scope`/`OwningScope`/`ManualScope`/ are now all top-level in the `gpu_profiler` module. `GpuProfiler` has utilities to create them directly.
