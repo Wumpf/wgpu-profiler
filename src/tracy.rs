@@ -45,7 +45,6 @@ pub fn create_tracy_gpu_client(
         }
         wgpu::Backend::Vulkan => tracy_client::GpuContextType::Vulkan,
         wgpu::Backend::Dx12 => tracy_client::GpuContextType::Direct3D12,
-        wgpu::Backend::Dx11 => tracy_client::GpuContextType::Direct3D11,
         wgpu::Backend::Gl => tracy_client::GpuContextType::OpenGL,
     };
 
