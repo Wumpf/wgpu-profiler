@@ -16,7 +16,7 @@ use wgpu_profiler::*;
     # let (device, queue) = adapter
     #     .request_device(
     #         &wgpu::DeviceDescriptor {
-    #             features: wgpu::Features::TIMESTAMP_QUERY,
+    #             required_features: wgpu::Features::TIMESTAMP_QUERY,
     #             ..Default::default()
     #         },
     #         None,
