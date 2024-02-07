@@ -2,9 +2,9 @@ name: Rust
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 env:
   CARGO_TERM_COLOR: always
@@ -14,8 +14,11 @@ jobs:
     name: Rust Format and Clippy
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: dtolnay/rust-toolchain@stable
-    - run: cargo fmt -- --check
-    - run: cargo clippy -- -D warnings
-    - run: cargo clippy --all-features -- -D warnings
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          target: wasm32-unknown-unknown
+      - run: cargo fmt -- --check
+      - run: cargo clippy --locked -- -D warnings
+      - run: cargo check --locked --target wasm32-unknown-unknown
+      - run: cargo clippy --locked --all-features -- -D warnings

@@ -25,3 +25,6 @@ futures-lite = "2"
 profiling = { version = "1" }
 tracy-client = "0.16.1"
 winit = "0.29"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+web-sys = "=0.3.67" # Prevent upgrading web-sys to 0.3.68 which would break wgpu right
