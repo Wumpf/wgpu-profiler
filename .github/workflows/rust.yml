@@ -16,6 +16,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          target: wasm32-unknown-unknown
       - run: cargo fmt -- --check
       - run: cargo clippy -- -D warnings
       - run: cargo check --target wasm32-unknown-unknown
