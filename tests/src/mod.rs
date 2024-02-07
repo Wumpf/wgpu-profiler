@@ -22,7 +22,7 @@ pub fn create_device(
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
-                    features,
+                    required_features: features,
                     ..Default::default()
                 },
                 None,

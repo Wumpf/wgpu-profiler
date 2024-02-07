@@ -683,9 +683,15 @@ impl GpuProfiler {
             None
         };
 
+        let pid = if cfg!(target_arch = "wasm32") {
+            0
+        } else {
+            std::process::id()
+        };
+
         GpuProfilerQuery {
             label,
-            pid: std::process::id(),
+            pid,
             tid: std::thread::current().id(),
             timer_query_pair: query,
             handle: self.next_scope_tree_handle(),
