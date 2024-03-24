@@ -1887,7 +1887,7 @@ dependencies = [
 
 [[package]]
 name = "wgpu-profiler"
-version = "0.16.1"
+version = "0.16.2"
 dependencies = [
  "futures-lite",
  "parking_lot",

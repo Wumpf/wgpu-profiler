@@ -87,6 +87,8 @@ for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
 
 ## Changelog
+* 0.16.2
+  * Updating to wgpu 0.19.3 thus removing the need for pinned web-sys, by @xStrom in [#65](https://github.com/Wumpf/wgpu-profiler/pull/65)
 * 0.16.1
   * Fix building for wasm, by @davidster in [#62](https://github.com/Wumpf/wgpu-profiler/pull/62)
 * 0.16
