@@ -19,6 +19,6 @@ jobs:
         with:
           target: wasm32-unknown-unknown
       - run: cargo fmt -- --check
-      - run: cargo clippy --locked -- -D warnings
-      - run: cargo check --locked --target wasm32-unknown-unknown
-      - run: cargo clippy --locked --all-features -- -D warnings
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo check --locked --all-targets --target wasm32-unknown-unknown
+      - run: cargo clippy --locked --all-features --all-targets -- -D warnings
