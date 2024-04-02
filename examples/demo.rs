@@ -124,7 +124,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         &queue,
     )
     .unwrap_or_else(|err| match err {
-        CreationError::TracyClientNotRunning | CreationError::TracyGpuContextCreationError(_) => {
+        wgpu_profiler::CreationError::TracyClientNotRunning
+        | wgpu_profiler::CreationError::TracyGpuContextCreationError(_) => {
             println!("Failed to connect to Tracy. Continuing without Tracy integration.");
             GpuProfiler::new(GpuProfilerSettings::default()).expect("Failed to create profiler")
         }
