@@ -32,6 +32,10 @@ pub struct GpuTimerQueryResult {
 /// *Must* be closed by calling [`GpuProfiler::end_query`].
 ///
 /// Emitted by [`GpuProfiler::begin_query`]/[`GpuProfiler::begin_pass_query`] and consumed by [`GpuProfiler::end_query`].
+///
+/// [`GpuProfiler::begin_pass_query`]: crate::GpuProfiler::begin_pass_query
+/// [`GpuProfiler::begin_query`]: crate::GpuProfiler::begin_query
+/// [`GpuProfiler::end_query`]: crate::GpuProfiler::end_query
 pub struct GpuProfilerQuery {
     /// The label assigned to this query.
     /// Will be moved into [`GpuProfilerQuery::label`] once the query is fully processed.
@@ -64,6 +68,8 @@ impl GpuProfilerQuery {
     ///
     /// Use this only for a single render/compute pass, otherwise results will be overwritten.
     /// Only ever returns `Some` for queries that were created using [`GpuProfiler::begin_pass_query`].
+    ///
+    /// [`GpuProfiler::begin_pass_query`]: crate::GpuProfiler::begin_pass_query
     pub fn render_pass_timestamp_writes(&self) -> Option<wgpu::RenderPassTimestampWrites> {
         self.timer_query_pair.as_ref().and_then(|query| {
             (query.usage_state == QueryPairUsageState::ReservedForPassTimestampWrites).then(|| {
@@ -80,6 +86,8 @@ impl GpuProfilerQuery {
     ///
     /// Use this only for a single render/compute pass, otherwise results will be overwritten.
     /// Only ever returns `Some` for queries that were created using [`GpuProfiler::begin_pass_query`].
+    ///
+    /// [`GpuProfiler::begin_pass_query`]: crate::GpuProfiler::begin_pass_query
     pub fn compute_pass_timestamp_writes(&self) -> Option<wgpu::ComputePassTimestampWrites> {
         self.timer_query_pair.as_ref().and_then(|query| {
             (query.usage_state == QueryPairUsageState::ReservedForPassTimestampWrites).then(|| {
