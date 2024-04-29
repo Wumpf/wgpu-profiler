@@ -860,7 +860,7 @@ struct PendingFramePools {
 pub type GpuTimerQueryTreeHandle = u32;
 
 /// Handle for the root scope.
-pub const ROOT_QUERY_HANDLE: GpuTimerQueryTreeHandle = std::u32::MAX;
+pub const ROOT_QUERY_HANDLE: GpuTimerQueryTreeHandle = u32::MAX;
 
 struct ActiveFrame {
     query_pools: RwLock<PendingFramePools>,

@@ -42,7 +42,7 @@ fn write_results_recursive(
             .replace("ThreadId(", "")
             .replace(')', "")
             .parse::<u64>()
-            .unwrap_or(std::u64::MAX)
+            .unwrap_or(u64::MAX)
     };
     write!(
         file,
