@@ -159,7 +159,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     }
                 }
                 Event::AboutToWait => {
-                    // Continuos rendering!
+                    // Continuous rendering!
                     window.request_redraw();
                 }
                 Event::WindowEvent {
