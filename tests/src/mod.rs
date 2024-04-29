@@ -37,6 +37,7 @@ pub fn create_device(
 #[derive(Debug)]
 enum Requires {
     Timestamps,
+    TimestampsInEncoders,
     TimestampsInPasses,
 }
 
@@ -60,6 +61,9 @@ fn validate_results(
         .iter()
         .filter(|expected| match expected.1 {
             Requires::Timestamps => features.contains(wgpu::Features::TIMESTAMP_QUERY),
+            Requires::TimestampsInEncoders => {
+                features.contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS)
+            }
             Requires::TimestampsInPasses => {
                 features.contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES)
             }
@@ -86,6 +90,9 @@ fn validate_results_unordered(
         .iter()
         .filter(|expected| match expected.1 {
             Requires::Timestamps => features.contains(wgpu::Features::TIMESTAMP_QUERY),
+            Requires::TimestampsInEncoders => {
+                features.contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS)
+            }
             Requires::TimestampsInPasses => {
                 features.contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES)
             }

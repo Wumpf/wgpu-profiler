@@ -99,8 +99,8 @@ macro_rules! impl_scope_ext {
             /// Ignores passed `wgpu::RenderPassDescriptor::timestamp_writes` and replaces it with
             /// `timestamp_writes` managed by `GpuProfiler`.
             ///
-            /// Note that in order to take measurements, this does not require the
-            /// [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES`] feature, only [`wgpu::Features::TIMESTAMP_QUERY`].
+            /// Note that in order to take measurements, this requires the
+            /// [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS`] feature.
             #[track_caller]
             pub fn scoped_render_pass<'b>(
                 &'b mut self,
@@ -131,8 +131,8 @@ macro_rules! impl_scope_ext {
             /// Uses passed label both for profiler scope and compute pass label.
             /// `timestamp_writes` managed by `GpuProfiler`.
             ///
-            /// Note that in order to take measurements, this does not require the
-            /// [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES`] feature, only [`wgpu::Features::TIMESTAMP_QUERY`].
+            /// Note that in order to take measurements, this requires the
+            /// [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS`] feature.
             #[track_caller]
             pub fn scoped_compute_pass<'b>(
                 &'b mut self,

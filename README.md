@@ -46,8 +46,10 @@ compute_pass.set_pipeline(&pipeline);
 ```
 
 `GpuProfiler` reads the device features on first use:
-if your wgpu device doesn't have `wgpu::Features::TIMESTAMP_QUERY` enabled, it won't attempt to emit any timer queries.
-Similarly, if `wgpu::Features::WRITE_TIMESTAMP_INSIDE_PASSES` is not present, no queries will be issued from inside passes.
+
+* `wgpu::Features::TIMESTAMP_QUERY` is required to emit any timer queries.
+* `wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS` is required to issue queries within encoders.
+* `wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES` is required to issue queries within passes.
 
 Wgpu-profiler needs to insert buffer copy commands, so when you're done with an encoder and won't do any more profiling scopes on it, you need to resolve the queries:
 ```rust
@@ -87,6 +89,8 @@ for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
 
 ## Changelog
+* 0.17
+  * update to wgpu 0.20
 * 0.16.2
   * Updating to wgpu 0.19.3 thus removing the need for pinned web-sys, by @xStrom in [#65](https://github.com/Wumpf/wgpu-profiler/pull/65)
 * 0.16.1

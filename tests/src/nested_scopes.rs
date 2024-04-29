@@ -77,7 +77,7 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
         &[
             expected_scope(
                 "e0_s0",
-                Requires::Timestamps,
+                Requires::TimestampsInEncoders,
                 [
                     expected_scope("e0_s0_c0", Requires::Timestamps, []),
                     expected_scope(
@@ -106,7 +106,7 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
             ),
             expected_scope(
                 "e1_s0",
-                Requires::Timestamps,
+                Requires::TimestampsInEncoders,
                 [
                     expected_scope("e1_s0_s0", Requires::Timestamps, []),
                     expected_scope("e1_s0_s1", Requires::Timestamps, []),
@@ -119,7 +119,7 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
                     ),
                 ],
             ),
-            expected_scope("e2_s0", Requires::Timestamps, []),
+            expected_scope("e2_s0", Requires::TimestampsInEncoders, []),
         ],
     );
 }

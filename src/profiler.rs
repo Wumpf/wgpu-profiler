@@ -42,8 +42,9 @@ pub struct GpuProfiler {
 // Public interface
 impl GpuProfiler {
     /// Combination of all timer query features [`GpuProfiler`] can leverage.
-    pub const ALL_WGPU_TIMER_FEATURES: wgpu::Features =
-        wgpu::Features::TIMESTAMP_QUERY.union(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES);
+    pub const ALL_WGPU_TIMER_FEATURES: wgpu::Features = wgpu::Features::TIMESTAMP_QUERY
+        .union(wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS)
+        .union(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES);
 
     /// Combination of all timer query features [`GpuProfiler`] can leverage.
     #[deprecated(since = "0.9.0", note = "Use ALL_WGPU_TIMER_FEATURES instead")]
@@ -116,8 +117,8 @@ impl GpuProfiler {
     /// To nest scopes inside this scope, call [`Scope::scope`] on the returned scope.
     ///
     /// If an [`wgpu::CommandEncoder`] is passed but the [`wgpu::Device`]
-    /// does not support [`wgpu::Features::TIMESTAMP_QUERY`], no gpu timer will be queried and the scope will
-    /// not show up in the final results.
+    /// does not support [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS`], no gpu timer will
+    /// be queried and the scope will not show up in the final results.
     /// If an [`wgpu::ComputePass`] or [`wgpu::RenderPass`] is passed but the [`wgpu::Device`]
     /// does not support [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES`], no scope will be opened.
     ///
@@ -146,8 +147,8 @@ impl GpuProfiler {
     /// To nest scopes inside this scope, call [`OwningScope::scope`] on the returned scope.
     ///
     /// If an [`wgpu::CommandEncoder`] is passed but the [`wgpu::Device`]
-    /// does not support [`wgpu::Features::TIMESTAMP_QUERY`], no gpu timer will be queried and the scope will
-    /// not show up in the final results.
+    /// does not support [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS`], no gpu timer will be queried
+    /// and the scope will not show up in the final results.
     /// If an [`wgpu::ComputePass`] or [`wgpu::RenderPass`] is passed but the [`wgpu::Device`]
     /// does not support [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES`], no scope will be opened.
     ///
@@ -181,7 +182,7 @@ impl GpuProfiler {
     /// To nest scopes inside this scope, call [`ManualOwningScope::scope`] on the returned scope.
     ///
     /// If an [`wgpu::CommandEncoder`] is passed but the [`wgpu::Device`]
-    /// does not support [`wgpu::Features::TIMESTAMP_QUERY`], no gpu timer will be queried and the scope will
+    /// does not support [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS`], no gpu timer will be queried and the scope will
     /// not show up in the final results.
     /// If an [`wgpu::ComputePass`] or [`wgpu::RenderPass`] is passed but the [`wgpu::Device`]
     /// does not support [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES`], no scope will be opened.
@@ -211,7 +212,7 @@ impl GpuProfiler {
     /// To do this automatically, use [`GpuProfiler::scope`]/[`GpuProfiler::owning_scope`] instead.
     ///
     /// If an [`wgpu::CommandEncoder`] is passed but the [`wgpu::Device`]
-    /// does not support [`wgpu::Features::TIMESTAMP_QUERY`], no gpu timer will be queried and the scope will
+    /// does not support [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS`], no gpu timer will be queried and the scope will
     /// not show up in the final results.
     /// If an [`wgpu::ComputePass`] or [`wgpu::RenderPass`] is passed but the [`wgpu::Device`]
     /// does not support [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES`], no timer queries will be allocated.
@@ -517,7 +518,7 @@ fn timestamp_write_supported<Recorder: ProfilerCommandRecorder>(
     let required_feature = if encoder_or_pass.is_pass() {
         wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES
     } else {
-        wgpu::Features::TIMESTAMP_QUERY
+        wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS
     };
     features.contains(required_feature)
 }

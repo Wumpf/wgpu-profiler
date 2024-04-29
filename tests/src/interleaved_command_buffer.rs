@@ -43,12 +43,12 @@ fn interleaved_scopes() {
         &[
             expected_scope(
                 "e1_s0",
-                Requires::Timestamps,
+                Requires::TimestampsInEncoders,
                 [expected_scope("e1_s0_s0", Requires::Timestamps, [])],
             ),
             expected_scope(
                 "e0_s0",
-                Requires::Timestamps,
+                Requires::TimestampsInEncoders,
                 [
                     expected_scope("e0_s0_s0", Requires::Timestamps, []),
                     expected_scope("e0_s0_s1", Requires::Timestamps, []),
@@ -113,10 +113,11 @@ fn multithreaded_scopes() {
         device.features(),
         &frame,
         &(0..NUM_SCOPES_PER_THREAD)
-            .map(|i| expected_scope(format!("e0_s{i}"), Requires::Timestamps, []))
+            .map(|i| expected_scope(format!("e0_s{i}"), Requires::TimestampsInEncoders, []))
             .chain(
-                (0..NUM_SCOPES_PER_THREAD)
-                    .map(|i| expected_scope(format!("e1_s{i}"), Requires::Timestamps, [])),
+                (0..NUM_SCOPES_PER_THREAD).map(|i| {
+                    expected_scope(format!("e1_s{i}"), Requires::TimestampsInEncoders, [])
+                }),
             )
             .collect::<Vec<_>>(),
     );
