@@ -1,5 +1,3 @@
-use wgpu::RequestDeviceError;
-
 mod dropped_frame_handling;
 mod errors;
 mod interleaved_command_buffer;
@@ -7,10 +5,10 @@ mod nested_scopes;
 
 pub fn create_device(
     features: wgpu::Features,
-) -> Result<(wgpu::Backend, wgpu::Device, wgpu::Queue), RequestDeviceError> {
+) -> Result<(wgpu::Backend, wgpu::Device, wgpu::Queue), wgpu::RequestDeviceError> {
     async fn create_default_device_async(
         features: wgpu::Features,
-    ) -> Result<(wgpu::Backend, wgpu::Device, wgpu::Queue), RequestDeviceError> {
+    ) -> Result<(wgpu::Backend, wgpu::Device, wgpu::Queue), wgpu::RequestDeviceError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY, // Workaround for wgl having issues with parallel device destruction.
             ..Default::default()
@@ -34,11 +32,27 @@ pub fn create_device(
     futures_lite::future::block_on(create_default_device_async(features))
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum Requires {
+    Disabled,
     Timestamps,
     TimestampsInEncoders,
     TimestampsInPasses,
+}
+
+impl Requires {
+    fn expect_time_result(self, features: wgpu::Features) -> bool {
+        match self {
+            Requires::Timestamps => features.contains(wgpu::Features::TIMESTAMP_QUERY),
+            Requires::TimestampsInEncoders => {
+                features.contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS)
+            }
+            Requires::TimestampsInPasses => {
+                features.contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES)
+            }
+            Requires::Disabled => false,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -54,63 +68,56 @@ fn expected_scope(
 
 fn validate_results(
     features: wgpu::Features,
-    result: &[wgpu_profiler::GpuTimerQueryResult],
+    results: &[wgpu_profiler::GpuTimerQueryResult],
     expected: &[ExpectedScope],
 ) {
-    let expected = expected
-        .iter()
-        .filter(|expected| match expected.1 {
-            Requires::Timestamps => features.contains(wgpu::Features::TIMESTAMP_QUERY),
-            Requires::TimestampsInEncoders => {
-                features.contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS)
-            }
-            Requires::TimestampsInPasses => {
-                features.contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES)
-            }
-        })
-        .collect::<Vec<_>>();
-
     assert_eq!(
-        result.len(),
+        results.len(),
         expected.len(),
-        "result: {result:?}\nexpected: {expected:?}"
+        "results: {results:?}\nexpected: {expected:?}"
     );
-    for (result, expected) in result.iter().zip(expected.iter()) {
+    for (result, expected) in results.iter().zip(expected.iter()) {
         assert_eq!(result.label, expected.0);
+        assert_eq!(
+            result.time.is_some(),
+            expected.1.expect_time_result(features),
+            "label: {}",
+            result.label
+        );
+
         validate_results(features, &result.nested_queries, &expected.2);
     }
 }
 
 fn validate_results_unordered(
     features: wgpu::Features,
-    result: &[wgpu_profiler::GpuTimerQueryResult],
+    results: &[wgpu_profiler::GpuTimerQueryResult],
     expected: &[ExpectedScope],
 ) {
-    let expected = expected
-        .iter()
-        .filter(|expected| match expected.1 {
-            Requires::Timestamps => features.contains(wgpu::Features::TIMESTAMP_QUERY),
-            Requires::TimestampsInEncoders => {
-                features.contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS)
-            }
-            Requires::TimestampsInPasses => {
-                features.contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES)
-            }
-        })
-        .collect::<Vec<_>>();
-
     assert_eq!(
-        result.len(),
+        results.len(),
         expected.len(),
-        "result: {result:?}\nexpected: {expected:?}"
+        "result: {results:?}\nexpected: {expected:?}"
     );
 
-    let mut expected_labels = std::collections::HashSet::<String>::from_iter(
-        expected.iter().map(|expected| expected.0.clone()),
-    );
+    let mut expected_by_label =
+        std::collections::HashMap::<String, (Requires, &[ExpectedScope])>::from_iter(
+            expected
+                .iter()
+                .map(|expected| (expected.0.clone(), (expected.1, expected.2.as_ref()))),
+        );
 
-    for (result, expected) in result.iter().zip(expected.iter()) {
-        assert!(expected_labels.remove(&result.label));
-        validate_results(features, &result.nested_queries, &expected.2);
+    for result in results {
+        let Some((requires, nested_expectations)) = expected_by_label.remove(&result.label) else {
+            panic!("missing result for label: {}", result.label);
+        };
+        assert_eq!(
+            result.time.is_some(),
+            requires.expect_time_result(features),
+            "label: {}",
+            result.label
+        );
+
+        validate_results(features, &result.nested_queries, &nested_expectations);
     }
 }

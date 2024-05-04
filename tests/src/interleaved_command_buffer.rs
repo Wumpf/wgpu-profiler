@@ -44,14 +44,18 @@ fn interleaved_scopes() {
             expected_scope(
                 "e1_s0",
                 Requires::TimestampsInEncoders,
-                [expected_scope("e1_s0_s0", Requires::Timestamps, [])],
+                [expected_scope(
+                    "e1_s0_s0",
+                    Requires::TimestampsInEncoders,
+                    [],
+                )],
             ),
             expected_scope(
                 "e0_s0",
                 Requires::TimestampsInEncoders,
                 [
-                    expected_scope("e0_s0_s0", Requires::Timestamps, []),
-                    expected_scope("e0_s0_s1", Requires::Timestamps, []),
+                    expected_scope("e0_s0_s0", Requires::TimestampsInEncoders, []),
+                    expected_scope("e0_s0_s1", Requires::TimestampsInEncoders, []),
                 ],
             ),
         ],
