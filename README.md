@@ -48,8 +48,9 @@ compute_pass.set_pipeline(&pipeline);
 `GpuProfiler` reads the device features on first use:
 
 * `wgpu::Features::TIMESTAMP_QUERY` is required to emit any timer queries.
-* `wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS` is required to issue queries within encoders.
-* `wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES` is required to issue queries within passes.
+  * Alone, this allows you to use timestamp writes on pass definition as done by `Scope::scoped_compute_pass`/`Scope::scoped_render_pass`
+* `wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS` is required to issue queries at any point within encoders.
+* `wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES` is required to issue queries at any point within passes.
 
 Wgpu-profiler needs to insert buffer copy commands, so when you're done with an encoder and won't do any more profiling scopes on it, you need to resolve the queries:
 ```rust
