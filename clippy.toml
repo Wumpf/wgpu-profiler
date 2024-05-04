@@ -1,2 +1,0 @@
-# Don't warn about these identifiers when using clippy::doc_markdown.
-doc-valid-idents = ["RenderDoc", ".."]
