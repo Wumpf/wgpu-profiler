@@ -739,7 +739,7 @@ impl GpuProfiler {
 
         queries_with_same_parent
             .into_iter()
-            .filter_map(|mut scope| {
+            .map(|mut scope| {
                 // Note that inactive queries may still have nested queries, it's therefore important we process all of them.
                 // In particular, this happens if only `wgpu::Features::TIMESTAMP_QUERY`` is enabled and `timestamp_writes`
                 // on passes are nested inside inactive encoder timer queries.
@@ -777,13 +777,13 @@ impl GpuProfiler {
                     scope.handle,
                 );
 
-                Some(GpuTimerQueryResult {
+                GpuTimerQueryResult {
                     label: std::mem::take(&mut scope.label),
                     time,
                     nested_queries,
                     pid: scope.pid,
                     tid: scope.tid,
-                })
+                }
             })
             .collect::<Vec<_>>()
     }
