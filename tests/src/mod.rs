@@ -118,6 +118,6 @@ fn validate_results_unordered(
             result.label
         );
 
-        validate_results(features, &result.nested_queries, &nested_expectations);
+        validate_results(features, &result.nested_queries, nested_expectations);
     }
 }
