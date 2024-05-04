@@ -13,7 +13,7 @@ pub struct GpuProfilerSettings {
 
     /// Enables/disables debug markers for all scopes on the respective encoder or pass.
     ///
-    /// This is useful for debugging with tools like RenderDoc.
+    /// This is useful for debugging with tools like [RenderDoc](https://renderdoc.org/).
     /// Debug markers will be emitted even if the device does not support timer queries or disables them via
     /// [`GpuProfilerSettings::enable_timer_queries`].
     pub enable_debug_groups: bool,
