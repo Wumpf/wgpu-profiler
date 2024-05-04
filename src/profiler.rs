@@ -97,11 +97,11 @@ impl GpuProfiler {
 
     /// Changes the settings of an existing profiler.
     ///
-    /// If timer scopes are disabled by setting [GpuProfilerSettings::enable_timer_queries] to false,
+    /// If timer scopes are disabled by setting [`GpuProfilerSettings::enable_timer_queries`] to false,
     /// any timer queries that are in flight will still be processed,
     /// but unused query sets and buffers will be deallocated during [`Self::process_finished_frame`].
     /// Similarly, any opened debugging scope will still be closed if debug groups are disabled by setting
-    /// [GpuProfilerSettings::enable_debug_groups] to false.
+    /// [`GpuProfilerSettings::enable_debug_groups`] to false.
     pub fn change_settings(&mut self, settings: GpuProfilerSettings) -> Result<(), SettingsError> {
         settings.validate()?;
         if !settings.enable_timer_queries {
@@ -467,7 +467,7 @@ impl GpuProfiler {
 
     /// Checks if all timer queries for the oldest pending finished frame are done and returns that snapshot if any.
     ///
-    /// timestamp_period:
+    /// `timestamp_period`:
     ///    The timestamp period of the device. Pass the result of [`wgpu::Queue::get_timestamp_period()`].
     ///    Note that some implementations (Chrome as of writing) may converge to a timestamp period while the application is running,
     ///    so caching this value is usually not recommended.
@@ -782,7 +782,7 @@ pub enum QueryPairUsageState {
 }
 
 pub struct ReservedTimerQueryPair {
-    /// QueryPool on which both start & end queries of the scope are done.
+    /// [`QueryPool`] on which both start & end queries of the scope are done.
     ///
     /// By putting an arc here instead of an index into a vec, we don't need
     /// need to take any locks upon closing a profiling scope.

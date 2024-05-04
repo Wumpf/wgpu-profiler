@@ -9,6 +9,9 @@ repository = "https://github.com/Wumpf/wgpu-profiler"
 keywords = ["graphics"]
 license = "MIT OR Apache-2.0"
 
+[lints]
+clippy.doc_markdown = "warn"
+
 [features]
 tracy = ["tracy-client", "profiling/profile-with-tracy"]
 
