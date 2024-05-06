@@ -42,8 +42,9 @@ pub struct GpuProfiler {
 // Public interface
 impl GpuProfiler {
     /// Combination of all timer query features [`GpuProfiler`] can leverage.
-    pub const ALL_WGPU_TIMER_FEATURES: wgpu::Features =
-        wgpu::Features::TIMESTAMP_QUERY.union(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES);
+    pub const ALL_WGPU_TIMER_FEATURES: wgpu::Features = wgpu::Features::TIMESTAMP_QUERY
+        .union(wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS)
+        .union(wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES);
 
     /// Combination of all timer query features [`GpuProfiler`] can leverage.
     #[deprecated(since = "0.9.0", note = "Use ALL_WGPU_TIMER_FEATURES instead")]
@@ -116,8 +117,8 @@ impl GpuProfiler {
     /// To nest scopes inside this scope, call [`Scope::scope`] on the returned scope.
     ///
     /// If an [`wgpu::CommandEncoder`] is passed but the [`wgpu::Device`]
-    /// does not support [`wgpu::Features::TIMESTAMP_QUERY`], no gpu timer will be queried and the scope will
-    /// not show up in the final results.
+    /// does not support [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS`], no gpu timer will
+    /// be queried and the scope will not show up in the final results.
     /// If an [`wgpu::ComputePass`] or [`wgpu::RenderPass`] is passed but the [`wgpu::Device`]
     /// does not support [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES`], no scope will be opened.
     ///
@@ -146,8 +147,8 @@ impl GpuProfiler {
     /// To nest scopes inside this scope, call [`OwningScope::scope`] on the returned scope.
     ///
     /// If an [`wgpu::CommandEncoder`] is passed but the [`wgpu::Device`]
-    /// does not support [`wgpu::Features::TIMESTAMP_QUERY`], no gpu timer will be queried and the scope will
-    /// not show up in the final results.
+    /// does not support [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS`], no gpu timer will be queried
+    /// and the scope will not show up in the final results.
     /// If an [`wgpu::ComputePass`] or [`wgpu::RenderPass`] is passed but the [`wgpu::Device`]
     /// does not support [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES`], no scope will be opened.
     ///
@@ -181,7 +182,7 @@ impl GpuProfiler {
     /// To nest scopes inside this scope, call [`ManualOwningScope::scope`] on the returned scope.
     ///
     /// If an [`wgpu::CommandEncoder`] is passed but the [`wgpu::Device`]
-    /// does not support [`wgpu::Features::TIMESTAMP_QUERY`], no gpu timer will be queried and the scope will
+    /// does not support [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS`], no gpu timer will be queried and the scope will
     /// not show up in the final results.
     /// If an [`wgpu::ComputePass`] or [`wgpu::RenderPass`] is passed but the [`wgpu::Device`]
     /// does not support [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES`], no scope will be opened.
@@ -211,7 +212,7 @@ impl GpuProfiler {
     /// To do this automatically, use [`GpuProfiler::scope`]/[`GpuProfiler::owning_scope`] instead.
     ///
     /// If an [`wgpu::CommandEncoder`] is passed but the [`wgpu::Device`]
-    /// does not support [`wgpu::Features::TIMESTAMP_QUERY`], no gpu timer will be queried and the scope will
+    /// does not support [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS`], no gpu timer will be queried and the scope will
     /// not show up in the final results.
     /// If an [`wgpu::ComputePass`] or [`wgpu::RenderPass`] is passed but the [`wgpu::Device`]
     /// does not support [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES`], no timer queries will be allocated.
@@ -225,7 +226,13 @@ impl GpuProfiler {
         encoder_or_pass: &mut Recorder,
         device: &wgpu::Device,
     ) -> GpuProfilerQuery {
-        let mut query = self.begin_query_internal(label.into(), encoder_or_pass, device);
+        let is_for_pass_timestamp_writes = false;
+        let mut query = self.begin_query_internal(
+            label.into(),
+            is_for_pass_timestamp_writes,
+            encoder_or_pass,
+            device,
+        );
         if let Some(timer_query) = &mut query.timer_query_pair {
             encoder_or_pass
                 .write_timestamp(&timer_query.pool.query_set, timer_query.start_query_idx);
@@ -245,7 +252,7 @@ impl GpuProfiler {
     /// To do this automatically, use [`Scope::scoped_render_pass`]/[`Scope::scoped_compute_pass`] instead.
     ///
     /// Call [`GpuProfilerQuery::render_pass_timestamp_writes`] or [`GpuProfilerQuery::compute_pass_timestamp_writes`]
-    /// to acquire the corresponding `wgpu::RenderPassTimestampWrites`/`wgpu::ComputePassTimestampWrites` object.
+    /// to acquire the corresponding [`wgpu::RenderPassTimestampWrites`]/[`wgpu::ComputePassTimestampWrites`] object.
     ///
     /// If the [`wgpu::Device`] does not support [`wgpu::Features::TIMESTAMP_QUERY`], no gpu timer will be reserved.
     ///
@@ -258,7 +265,9 @@ impl GpuProfiler {
         encoder: &mut wgpu::CommandEncoder,
         device: &wgpu::Device,
     ) -> GpuProfilerQuery {
-        let mut query = self.begin_query_internal(label.into(), encoder, device);
+        let is_for_pass_timestamp_writes = true;
+        let mut query =
+            self.begin_query_internal(label.into(), is_for_pass_timestamp_writes, encoder, device);
         if let Some(timer_query) = &mut query.timer_query_pair {
             timer_query.usage_state = QueryPairUsageState::ReservedForPassTimestampWrites;
         }
@@ -485,19 +494,28 @@ impl GpuProfiler {
             return None;
         }
 
-        let mut frame = self.pending_frames.remove(0);
+        let PendingFrame {
+            query_pools,
+            mut closed_query_by_parent_handle,
+            mapped_buffers: _,
+        } = self.pending_frames.remove(0);
 
         let results = {
             let timestamp_to_sec = timestamp_period as f64 / 1000.0 / 1000.0 / 1000.0;
 
             Self::process_timings_recursive(
                 timestamp_to_sec,
-                &mut frame.closed_query_by_parent_handle,
+                &mut closed_query_by_parent_handle,
                 ROOT_QUERY_HANDLE,
             )
         };
 
-        self.reset_and_cache_unused_query_pools(frame.query_pools);
+        // Ensure that closed queries no longer hold references to the query pools.
+        // `process_timings_recursive` should have handled this already.
+        debug_assert!(closed_query_by_parent_handle.is_empty());
+        drop(closed_query_by_parent_handle); // But just in case, we make sure to drop it here even if above debug assertion fails.
+
+        self.reset_and_cache_unused_query_pools(query_pools);
 
         Some(results)
     }
@@ -509,15 +527,18 @@ impl GpuProfiler {
 
 const QUERY_SET_MAX_QUERIES: u32 = wgpu::QUERY_SET_MAX_QUERIES;
 
-/// Returns true if a timestamp should be written to the encoder or pass.
-fn timestamp_write_supported<Recorder: ProfilerCommandRecorder>(
+/// Returns true if a timestamp query is supported.
+fn timestamp_query_support<Recorder: ProfilerCommandRecorder>(
+    is_for_pass_timestamp_writes: bool,
     encoder_or_pass: &mut Recorder,
     features: wgpu::Features,
 ) -> bool {
-    let required_feature = if encoder_or_pass.is_pass() {
+    let required_feature = if is_for_pass_timestamp_writes {
+        wgpu::Features::TIMESTAMP_QUERY
+    } else if encoder_or_pass.is_pass() {
         wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES
     } else {
-        wgpu::Features::TIMESTAMP_QUERY
+        wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS
     };
     features.contains(required_feature)
 }
@@ -653,6 +674,7 @@ impl GpuProfiler {
     fn begin_query_internal<Recorder: ProfilerCommandRecorder>(
         &self,
         label: String,
+        is_for_pass_timestamp_writes: bool,
         encoder_or_pass: &mut Recorder,
         device: &wgpu::Device,
     ) -> GpuProfilerQuery {
@@ -661,8 +683,11 @@ impl GpuProfiler {
         self.num_open_queries.fetch_add(1, Ordering::Acquire);
 
         let query = if self.settings.enable_timer_queries
-            && timestamp_write_supported(encoder_or_pass, device.features())
-        {
+            && timestamp_query_support(
+                is_for_pass_timestamp_writes,
+                encoder_or_pass,
+                device.features(),
+            ) {
             Some(self.reserve_query_pair(device))
         } else {
             None
@@ -714,37 +739,37 @@ impl GpuProfiler {
 
         queries_with_same_parent
             .into_iter()
-            .filter_map(|mut scope| {
-                let Some(query) = scope.timer_query_pair.take() else {
-                    // Inactive queries don't have any results or nested queries with results.
-                    // Currently, we drop them from the results completely.
-                    // In the future we could still make them show up since they convey information like label & pid/tid.
-                    return None;
-                };
+            .map(|mut scope| {
+                // Note that inactive queries may still have nested queries, it's therefore important we process all of them.
+                // In particular, this happens if only `wgpu::Features::TIMESTAMP_QUERY`` is enabled and `timestamp_writes`
+                // on passes are nested inside inactive encoder timer queries.
+                let time = scope.timer_query_pair.take().map(|query| {
+                    // Read timestamp from buffer.
+                    // By design timestamps for start/end are consecutive.
+                    let offset = (query.start_query_idx * wgpu::QUERY_SIZE) as u64;
+                    let buffer_slice = &query
+                        .pool
+                        .read_buffer
+                        .slice(offset..(offset + (wgpu::QUERY_SIZE * 2) as u64))
+                        .get_mapped_range();
+                    let start_raw = u64::from_le_bytes(
+                        buffer_slice[0..wgpu::QUERY_SIZE as usize]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let end_raw = u64::from_le_bytes(
+                        buffer_slice[wgpu::QUERY_SIZE as usize..(wgpu::QUERY_SIZE as usize) * 2]
+                            .try_into()
+                            .unwrap(),
+                    );
 
-                // Read timestamp from buffer.
-                // By design timestamps for start/end are consecutive.
-                let offset = (query.start_query_idx * wgpu::QUERY_SIZE) as u64;
-                let buffer_slice = &query
-                    .pool
-                    .read_buffer
-                    .slice(offset..(offset + (wgpu::QUERY_SIZE * 2) as u64))
-                    .get_mapped_range();
-                let start_raw = u64::from_le_bytes(
-                    buffer_slice[0..wgpu::QUERY_SIZE as usize]
-                        .try_into()
-                        .unwrap(),
-                );
-                let end_raw = u64::from_le_bytes(
-                    buffer_slice[wgpu::QUERY_SIZE as usize..(wgpu::QUERY_SIZE as usize) * 2]
-                        .try_into()
-                        .unwrap(),
-                );
+                    #[cfg(feature = "tracy")]
+                    if let Some(tracy_scope) = scope.tracy_scope.take() {
+                        tracy_scope.upload_timestamp(start_raw as i64, end_raw as i64);
+                    }
 
-                #[cfg(feature = "tracy")]
-                if let Some(tracy_scope) = scope.tracy_scope.take() {
-                    tracy_scope.upload_timestamp(start_raw as i64, end_raw as i64);
-                }
+                    (start_raw as f64 * timestamp_to_sec)..(end_raw as f64 * timestamp_to_sec)
+                });
 
                 let nested_queries = Self::process_timings_recursive(
                     timestamp_to_sec,
@@ -752,14 +777,13 @@ impl GpuProfiler {
                     scope.handle,
                 );
 
-                Some(GpuTimerQueryResult {
+                GpuTimerQueryResult {
                     label: std::mem::take(&mut scope.label),
-                    time: (start_raw as f64 * timestamp_to_sec)
-                        ..(end_raw as f64 * timestamp_to_sec),
+                    time,
                     nested_queries,
                     pid: scope.pid,
                     tid: scope.tid,
-                })
+                }
             })
             .collect::<Vec<_>>()
     }

@@ -13,11 +13,15 @@ fn scopes_to_console_recursive(results: &[GpuTimerQueryResult], indentation: u32
             print!("{:<width$}", "|", width = 4);
         }
 
-        println!(
-            "{:.3}μs - {}",
-            (scope.time.end - scope.time.start) * 1000.0 * 1000.0,
-            scope.label
-        );
+        if let Some(time) = &scope.time {
+            println!(
+                "{:.3}μs - {}",
+                (time.end - time.start) * 1000.0 * 1000.0,
+                scope.label
+            );
+        } else {
+            println!("n/a - {}", scope.label);
+        }
 
         if !scope.nested_queries.is_empty() {
             scopes_to_console_recursive(&scope.nested_queries, indentation + 1);
@@ -102,11 +106,13 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         vertex: wgpu::VertexState {
             module: &shader,
             entry_point: "vs_main",
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
             buffers: &[],
         },
         fragment: Some(wgpu::FragmentState {
             module: &shader,
             entry_point: "fs_main",
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
             targets: &[Some(swapchain_format.into())],
         }),
         primitive: wgpu::PrimitiveState::default(),

@@ -19,7 +19,8 @@ pub struct GpuTimerQueryResult {
     /// Time range of this scope in seconds.
     ///
     /// Meaning of absolute value is not defined.
-    pub time: Range<f64>,
+    /// If timestamp writing was disabled for this scope, this is None.
+    pub time: Option<Range<f64>>,
 
     /// Scopes that were opened while this scope was open.
     pub nested_queries: Vec<GpuTimerQueryResult>,

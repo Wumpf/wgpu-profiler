@@ -77,7 +77,7 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
         &[
             expected_scope(
                 "e0_s0",
-                Requires::Timestamps,
+                Requires::TimestampsInEncoders,
                 [
                     expected_scope("e0_s0_c0", Requires::Timestamps, []),
                     expected_scope(
@@ -106,36 +106,77 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
             ),
             expected_scope(
                 "e1_s0",
-                Requires::Timestamps,
+                Requires::TimestampsInEncoders,
                 [
-                    expected_scope("e1_s0_s0", Requires::Timestamps, []),
-                    expected_scope("e1_s0_s1", Requires::Timestamps, []),
+                    expected_scope("e1_s0_s0", Requires::TimestampsInEncoders, []),
+                    expected_scope("e1_s0_s1", Requires::TimestampsInEncoders, []),
                     expected_scope(
                         "e1_s0_s2",
-                        Requires::Timestamps,
+                        Requires::TimestampsInEncoders,
                         [
-                            expected_scope("e1_s0_s2_s0", Requires::Timestamps, []), //
+                            expected_scope("e1_s0_s2_s0", Requires::TimestampsInEncoders, []), //
                         ],
                     ),
                 ],
             ),
-            expected_scope("e2_s0", Requires::Timestamps, []),
+            expected_scope("e2_s0", Requires::TimestampsInEncoders, []),
+            expected_scope(
+                "e2_s1",
+                Requires::Disabled,
+                [expected_scope(
+                    "e2_s1_c1",
+                    Requires::Disabled,
+                    [expected_scope("e2_s1_c1_s0", Requires::Disabled, [])],
+                )],
+            ),
         ],
     );
 }
 
+// Note that `TIMESTAMP_QUERY_INSIDE_PASSES` implies support for `TIMESTAMP_QUERY_INSIDE_ENCODERS`.
+// But as of writing wgpu allows enabling pass timestamps without encoder timestamps and we should handle this fine as well!
+
 #[test]
-fn nested_scopes_all_features() {
-    let Ok((_, device, queue)) = create_device(GpuProfiler::ALL_WGPU_TIMER_FEATURES) else {
-        println!("Skipping test because device doesn't support timer features");
+fn nested_scopes_timestamp_in_passes_and_encoder_enabled() {
+    let Ok((_, device, queue)) = create_device(
+        wgpu::Features::TIMESTAMP_QUERY
+            | wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES
+            | wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS,
+    ) else {
+        println!("Skipping test because device doesn't support TIMESTAMP_QUERY_INSIDE_PASSES");
         return;
     };
     nested_scopes(&device, &queue);
 }
 
 #[test]
-fn nested_scopes_no_pass_features() {
-    let (_, device, queue) = create_device(wgpu::Features::TIMESTAMP_QUERY).unwrap();
+fn nested_scopes_timestamp_in_passes_enabled() {
+    let Ok((_, device, queue)) = create_device(
+        wgpu::Features::TIMESTAMP_QUERY | wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES,
+    ) else {
+        println!("Skipping test because device doesn't support TIMESTAMP_QUERY_INSIDE_PASSES");
+        return;
+    };
+    nested_scopes(&device, &queue);
+}
+
+#[test]
+fn nested_scopes_timestamp_in_encoders_enabled() {
+    let Ok((_, device, queue)) = create_device(
+        wgpu::Features::TIMESTAMP_QUERY | wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS,
+    ) else {
+        println!("Skipping test because device doesn't support TIMESTAMP_QUERY_INSIDE_ENCODERS");
+        return;
+    };
+    nested_scopes(&device, &queue);
+}
+
+#[test]
+fn nested_scopes_timestamp_enabled() {
+    let Ok((_, device, queue)) = create_device(wgpu::Features::TIMESTAMP_QUERY) else {
+        println!("Skipping test because device doesn't support TIMESTAMP_QUERY");
+        return;
+    };
     nested_scopes(&device, &queue);
 }
 
