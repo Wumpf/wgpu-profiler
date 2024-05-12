@@ -5,6 +5,7 @@
 * update to wgpu 0.20
 * `GpuTimerQueryResult` are now also produced when timing is disabled for that scope
   * `GpuTimerQueryResult::time` is an `Option` now
+* update tracy client to 0.17.0
 
 ## 0.16.2
 

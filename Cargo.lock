@@ -1081,7 +1081,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0f0f7f43585c34e4fdd7497d746bc32e14458cf11c69341cc0587b1d825dde42"
 dependencies = [
  "profiling-procmacros",
- "tracy-client",
+ "tracy-client 0.16.5",
 ]
 
 [[package]]
@@ -1535,6 +1535,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tracy-client"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59fb931a64ff88984f86d3e9bcd1ae8843aa7fe44dd0f8097527bc172351741d"
+dependencies = [
+ "loom",
+ "once_cell",
+ "tracy-client-sys",
+]
+
+[[package]]
 name = "tracy-client-sys"
 version = "0.22.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1902,7 +1913,7 @@ dependencies = [
  "parking_lot",
  "profiling",
  "thiserror",
- "tracy-client",
+ "tracy-client 0.17.0",
  "wgpu",
  "winit",
 ]
