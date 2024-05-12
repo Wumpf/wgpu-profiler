@@ -1,7 +1,8 @@
 # Change Log
 
+## Unreleased
 
-## unreleased
+## 0.17.0
 * update to wgpu 0.20
 * `GpuTimerQueryResult` are now also produced when timing is disabled for that scope
   * `GpuTimerQueryResult::time` is an `Option` now
