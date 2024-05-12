@@ -1,10 +1,10 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::Arc};
 use wgpu_profiler::{GpuProfiler, GpuProfilerSettings, GpuTimerQueryResult};
 use winit::{
-    event::{Event, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
+    application::ApplicationHandler,
+    event::WindowEvent,
+    event_loop::EventLoop,
     keyboard::{KeyCode, PhysicalKey},
-    window::Window,
 };
 
 fn scopes_to_console_recursive(results: &[GpuTimerQueryResult], indentation: u32) {
@@ -48,205 +48,244 @@ fn console_output(results: &Option<Vec<GpuTimerQueryResult>>, enabled_features: 
     }
 }
 
-async fn run(event_loop: EventLoop<()>, window: Window) {
-    let window = std::sync::Arc::new(window);
-    let size = window.inner_size();
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
-    let surface = instance
-        .create_surface(window.clone())
-        .expect("Failed to create surface.");
-    let adapter = instance
-        .request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::default(),
-            compatible_surface: Some(&surface),
-            force_fallback_adapter: false,
-        })
-        .await
-        .expect("Failed to find an appropriate adapter");
+#[derive(Default)]
+struct State {
+    window: Option<Arc<winit::window::Window>>,
+    gfx_state: Option<GfxState>,
+    latest_profiler_results: Option<Vec<GpuTimerQueryResult>>,
+}
 
-    dbg!(adapter.features());
+struct GfxState {
+    surface: wgpu::Surface<'static>,
+    surface_desc: wgpu::SurfaceConfiguration,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    render_pipeline: wgpu::RenderPipeline,
+    profiler: GpuProfiler,
+}
 
-    let (device, queue) = adapter
-        .request_device(
-            &wgpu::DeviceDescriptor {
-                label: None,
-                required_features: adapter.features() & GpuProfiler::ALL_WGPU_TIMER_FEATURES,
-                required_limits: wgpu::Limits::default(),
-            },
-            None,
-        )
-        .await
-        .expect("Failed to create device");
+impl GfxState {
+    async fn new(window: &Arc<winit::window::Window>) -> Self {
+        let size = window.inner_size();
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
+        let surface = instance
+            .create_surface(window.clone())
+            .expect("Failed to create surface.");
+        let adapter = instance
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::default(),
+                compatible_surface: Some(&surface),
+                force_fallback_adapter: false,
+            })
+            .await
+            .expect("Failed to find an appropriate adapter");
 
-    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: None,
-        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl"))),
-    });
+        dbg!(adapter.features());
 
-    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: None,
-        bind_group_layouts: &[],
-        push_constant_ranges: &[],
-    });
-
-    let mut sc_desc = wgpu::SurfaceConfiguration {
-        // By using the Fifo mode we ensure that CPU waits for GPU, thus we won't have an arbitrary amount of frames in flight that may be discarded.
-        // Profiler works just fine in any other mode, but keep in mind that this can mean that it would need to buffer up many more frames until the first results are back.
-        present_mode: wgpu::PresentMode::Immediate,
-        ..surface
-            .get_default_config(&adapter, size.width, size.height)
-            .unwrap()
-    };
-
-    let swapchain_format = sc_desc.format;
-
-    let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: None,
-        layout: Some(&pipeline_layout),
-        vertex: wgpu::VertexState {
-            module: &shader,
-            entry_point: "vs_main",
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-            buffers: &[],
-        },
-        fragment: Some(wgpu::FragmentState {
-            module: &shader,
-            entry_point: "fs_main",
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-            targets: &[Some(swapchain_format.into())],
-        }),
-        primitive: wgpu::PrimitiveState::default(),
-        depth_stencil: None,
-        multisample: wgpu::MultisampleState::default(),
-        multiview: None,
-    });
-
-    // Create a new profiler instance.
-    #[cfg(feature = "tracy")]
-    let mut profiler = GpuProfiler::new_with_tracy_client(
-        GpuProfilerSettings::default(),
-        adapter.get_info().backend,
-        &device,
-        &queue,
-    )
-    .unwrap_or_else(|err| match err {
-        wgpu_profiler::CreationError::TracyClientNotRunning
-        | wgpu_profiler::CreationError::TracyGpuContextCreationError(_) => {
-            println!("Failed to connect to Tracy. Continuing without Tracy integration.");
-            GpuProfiler::new(GpuProfilerSettings::default()).expect("Failed to create profiler")
-        }
-        _ => {
-            panic!("Failed to create profiler: {}", err);
-        }
-    });
-    #[cfg(not(feature = "tracy"))]
-    let mut profiler =
-        GpuProfiler::new(GpuProfilerSettings::default()).expect("Failed to create profiler");
-
-    let mut latest_profiler_results = None;
-
-    event_loop
-        .run(move |event, target| {
-            // Have the closure take ownership of the resources.
-            // `event_loop.run` never returns, therefore we must do this to ensure
-            // the resources are properly cleaned up.
-            let _ = (&instance, &adapter, &shader, &pipeline_layout);
-
-            target.set_control_flow(ControlFlow::Poll);
-            match event {
-                Event::WindowEvent {
-                    event: WindowEvent::Resized(size),
-                    ..
-                } => {
-                    if size.width > 0 && size.height > 0 {
-                        sc_desc.width = size.width;
-                        sc_desc.height = size.height;
-                        surface.configure(&device, &sc_desc);
-                    }
-                }
-                Event::AboutToWait => {
-                    // Continuous rendering!
-                    window.request_redraw();
-                }
-                Event::WindowEvent {
-                    event: WindowEvent::RedrawRequested,
-                    ..
-                } => {
-                    profiling::scope!("Redraw Requested");
-
-                    let frame = surface
-                        .get_current_texture()
-                        .expect("Failed to acquire next surface texture");
-                    let frame_view = frame
-                        .texture
-                        .create_view(&wgpu::TextureViewDescriptor::default());
-                    let mut encoder = device
-                        .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-
-                    draw(
-                        &profiler,
-                        &mut encoder,
-                        &frame_view,
-                        &device,
-                        &render_pipeline,
-                    );
-
-                    // Resolves any queries that might be in flight.
-                    profiler.resolve_queries(&mut encoder);
-
-                    {
-                        profiling::scope!("Submit");
-                        queue.submit(Some(encoder.finish()));
-                    }
-                    {
-                        profiling::scope!("Present");
-                        frame.present();
-                    }
-
-                    profiling::finish_frame!();
-
-                    // Signal to the profiler that the frame is finished.
-                    profiler.end_frame().unwrap();
-                    // Query for oldest finished frame (this is almost certainly not the one we just submitted!) and display results in the command line.
-                    if let Some(results) =
-                        profiler.process_finished_frame(queue.get_timestamp_period())
-                    {
-                        latest_profiler_results = Some(results);
-                    }
-                    console_output(&latest_profiler_results, device.features());
-                }
-                Event::WindowEvent { event, .. } => match event {
-                    WindowEvent::CloseRequested => {
-                        target.exit();
-                    }
-                    WindowEvent::KeyboardInput {
-                        event:
-                            winit::event::KeyEvent {
-                                physical_key: PhysicalKey::Code(keycode),
-                                ..
-                            },
-                        ..
-                    } => match keycode {
-                        KeyCode::Escape => {
-                            target.exit();
-                        }
-                        KeyCode::Space => {
-                            if let Some(profile_data) = &latest_profiler_results {
-                                wgpu_profiler::chrometrace::write_chrometrace(
-                                    std::path::Path::new("trace.json"),
-                                    profile_data,
-                                )
-                                .expect("Failed to write trace.json");
-                            }
-                        }
-                        _ => {}
-                    },
-                    _ => {}
+        let (device, queue) = adapter
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    label: None,
+                    required_features: adapter.features() & GpuProfiler::ALL_WGPU_TIMER_FEATURES,
+                    required_limits: wgpu::Limits::default(),
                 },
+                None,
+            )
+            .await
+            .expect("Failed to create device");
+
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: None,
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl"))),
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: None,
+            bind_group_layouts: &[],
+            push_constant_ranges: &[],
+        });
+
+        let surface_desc = wgpu::SurfaceConfiguration {
+            present_mode: wgpu::PresentMode::AutoVsync,
+            ..surface
+                .get_default_config(&adapter, size.width, size.height)
+                .unwrap()
+        };
+
+        let swapchain_format = surface_desc.format;
+
+        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: None,
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: "vs_main",
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: "fs_main",
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(swapchain_format.into())],
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+        });
+
+        // Create a new profiler instance.
+        #[cfg(feature = "tracy")]
+        let profiler = GpuProfiler::new_with_tracy_client(
+            GpuProfilerSettings::default(),
+            adapter.get_info().backend,
+            &device,
+            &queue,
+        )
+        .unwrap_or_else(|err| match err {
+            wgpu_profiler::CreationError::TracyClientNotRunning
+            | wgpu_profiler::CreationError::TracyGpuContextCreationError(_) => {
+                println!("Failed to connect to Tracy. Continuing without Tracy integration.");
+                GpuProfiler::new(GpuProfilerSettings::default()).expect("Failed to create profiler")
+            }
+            _ => {
+                panic!("Failed to create profiler: {}", err);
+            }
+        });
+        #[cfg(not(feature = "tracy"))]
+        let profiler =
+            GpuProfiler::new(GpuProfilerSettings::default()).expect("Failed to create profiler");
+
+        Self {
+            surface,
+            surface_desc,
+            device,
+            queue,
+            render_pipeline,
+            profiler,
+        }
+    }
+}
+
+impl ApplicationHandler<()> for State {
+    fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        if self.window.is_none() {
+            let window = Arc::new(
+                event_loop
+                    .create_window(
+                        winit::window::WindowAttributes::default().with_title("wgpu_profiler demo"),
+                    )
+                    .expect("Failed to create window"),
+            );
+
+            // Future versions of winit are supposed to be able to return a Future here for web support:
+            // https://github.com/rust-windowing/winit/issues/3626#issuecomment-2097916252
+            let gfx_state = futures_lite::future::block_on(GfxState::new(&window));
+
+            self.window = Some(window);
+            self.gfx_state = Some(gfx_state);
+        }
+    }
+
+    fn window_event(
+        &mut self,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+        _window_id: winit::window::WindowId,
+        event: WindowEvent,
+    ) {
+        let Some(GfxState {
+            surface,
+            surface_desc,
+            device,
+            queue,
+            render_pipeline,
+            profiler,
+        }) = self.gfx_state.as_mut()
+        else {
+            return;
+        };
+
+        match event {
+            WindowEvent::Resized(size) => {
+                if size.width > 0 && size.height > 0 {
+                    surface_desc.width = size.width;
+                    surface_desc.height = size.height;
+                    surface.configure(device, surface_desc);
+                }
+            }
+            WindowEvent::CloseRequested => {
+                event_loop.exit();
+            }
+
+            WindowEvent::RedrawRequested => {
+                profiling::scope!("Redraw Requested");
+
+                let frame = surface
+                    .get_current_texture()
+                    .expect("Failed to acquire next surface texture");
+                let frame_view = frame
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor::default());
+                let mut encoder =
+                    device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+
+                draw(profiler, &mut encoder, &frame_view, device, render_pipeline);
+
+                // Resolves any queries that might be in flight.
+                profiler.resolve_queries(&mut encoder);
+
+                {
+                    profiling::scope!("Submit");
+                    queue.submit(Some(encoder.finish()));
+                }
+                {
+                    profiling::scope!("Present");
+                    frame.present();
+                }
+
+                profiling::finish_frame!();
+
+                // Signal to the profiler that the frame is finished.
+                profiler.end_frame().unwrap();
+                // Query for oldest finished frame (this is almost certainly not the one we just submitted!) and display results in the command line.
+                self.latest_profiler_results =
+                    profiler.process_finished_frame(queue.get_timestamp_period());
+                console_output(&self.latest_profiler_results, device.features());
+            }
+
+            WindowEvent::KeyboardInput {
+                event:
+                    winit::event::KeyEvent {
+                        physical_key: PhysicalKey::Code(keycode),
+                        ..
+                    },
+                ..
+            } => match keycode {
+                KeyCode::Escape => {
+                    event_loop.exit();
+                }
+                KeyCode::Space => {
+                    if let Some(profile_data) = &self.latest_profiler_results {
+                        wgpu_profiler::chrometrace::write_chrometrace(
+                            std::path::Path::new("trace.json"),
+                            profile_data,
+                        )
+                        .expect("Failed to write trace.json");
+                    }
+                }
                 _ => {}
-            };
-        })
-        .unwrap();
+            },
+            _ => (),
+        };
+    }
+
+    fn about_to_wait(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
+        if let Some(window) = &self.window {
+            // Continuous rendering!
+            window.request_redraw();
+        }
+    }
 }
 
 fn draw(
@@ -348,8 +387,6 @@ fn main() {
     tracy_client::Client::start();
     //env_logger::init_from_env(env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "warn"));
     let event_loop = EventLoop::new().unwrap();
-    let window = winit::window::WindowBuilder::new()
-        .build(&event_loop)
-        .unwrap();
-    futures_lite::future::block_on(run(event_loop, window));
+    event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
+    let _ = event_loop.run_app(&mut State::default());
 }

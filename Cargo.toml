@@ -29,4 +29,4 @@ tracy-client = { version = "0.17", optional = true }
 futures-lite = "2"
 profiling = { version = "1" }
 tracy-client = "0.17.0"
-winit = "0.29"
+winit = "0.30"
