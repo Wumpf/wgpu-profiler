@@ -13,7 +13,7 @@ license = "MIT OR Apache-2.0"
 clippy.doc_markdown = "warn"
 
 [features]
-tracy = ["tracy-client", "profiling/profile-with-tracy"]
+tracy = ["dep:tracy-client", "profiling/profile-with-tracy"]
 
 [lib]
 
