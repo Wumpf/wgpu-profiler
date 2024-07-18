@@ -36,6 +36,7 @@ use wgpu_profiler::*;
 #        module: &cs_module,
 #        entry_point: "main",
 #        compilation_options: wgpu::PipelineCompilationOptions::default(),
+#        cache: None,
 #    });
 // ...
 

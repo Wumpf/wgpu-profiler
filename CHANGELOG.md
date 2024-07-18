@@ -1,6 +1,7 @@
 # Change Log
 
 ## Unreleased
+* update to wgpu 22.1.0
 
 ## 0.17.0
 * update to wgpu 0.20
