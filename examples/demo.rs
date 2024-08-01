@@ -88,6 +88,7 @@ impl GfxState {
                     label: None,
                     required_features: adapter.features() & GpuProfiler::ALL_WGPU_TIMER_FEATURES,
                     required_limits: wgpu::Limits::default(),
+                    memory_hints: wgpu::MemoryHints::default(),
                 },
                 None,
             )
@@ -133,6 +134,7 @@ impl GfxState {
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
+            cache: None,
         });
 
         // Create a new profiler instance.
