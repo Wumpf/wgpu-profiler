@@ -1,6 +1,6 @@
 [package]
 name = "wgpu-profiler"
-version = "0.17.0"
+version = "0.18.0"
 authors = ["Andreas Reich <r_andreas2@web.de>"]
 edition = "2021"
 description = "Simple profiler scopes for wgpu using timer queries"
@@ -20,7 +20,7 @@ tracy = ["dep:tracy-client", "profiling/profile-with-tracy"]
 [dependencies]
 parking_lot = "0.12" # Used for Mutex & RwLock. Note that wgpu already depends on parking_lot as well.
 thiserror = "1"
-wgpu = "0.20.0"
+wgpu = "22.1.0"
 
 tracy-client = { version = "0.17", optional = true }
 
