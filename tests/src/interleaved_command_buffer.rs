@@ -78,7 +78,7 @@ fn multithreaded_scopes() {
             barrier.wait();
 
             for i in 0..NUM_SCOPES_PER_THREAD {
-                let _ = profiler.scope(&format!("e0_s{i}"), &mut encoder, &device);
+                let _ = profiler.scope(format!("e0_s{i}"), &mut encoder, &device);
             }
             encoder.finish()
         });
@@ -88,7 +88,7 @@ fn multithreaded_scopes() {
             barrier.wait();
 
             for i in 0..NUM_SCOPES_PER_THREAD {
-                let _ = profiler.scope(&format!("e1_s{i}"), &mut encoder, &device);
+                let _ = profiler.scope(format!("e1_s{i}"), &mut encoder, &device);
             }
             encoder.finish()
         });
