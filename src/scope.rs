@@ -63,6 +63,36 @@ impl<'a, R: ProfilerCommandRecorder> ManualOwningScope<'a, R> {
     }
 }
 
+pub trait ScopeExt<R: ProfilerCommandRecorder>:
+    std::ops::Deref<Target = R> + std::ops::DerefMut<Target = R>
+{
+    /// Starts a new profiler scope nested within this one.
+    #[must_use]
+    #[track_caller]
+    fn scope(&mut self, label: impl Into<String>, device: &wgpu::Device) -> Scope<'_, R>;
+}
+
+pub trait PassEncoderExt:
+    std::ops::Deref<Target = wgpu::CommandEncoder>
+    + std::ops::DerefMut<Target = wgpu::CommandEncoder>
+    + ScopeExt<wgpu::CommandEncoder>
+{
+    #[track_caller]
+    fn scoped_render_pass<'a>(
+        &'a mut self,
+        label: impl Into<String>,
+        device: &wgpu::Device,
+        pass_descriptor: wgpu::RenderPassDescriptor<'_>,
+    ) -> OwningScope<'a, wgpu::RenderPass<'a>>;
+
+    #[track_caller]
+    fn scoped_compute_pass<'a>(
+        &'a mut self,
+        label: impl Into<String>,
+        device: &wgpu::Device,
+    ) -> OwningScope<'a, wgpu::ComputePass<'a>>;
+}
+
 /// Most implementation code of the different scope types is exactly the same.
 ///
 /// This macro allows to avoid code duplication.
@@ -90,6 +120,13 @@ macro_rules! impl_scope_ext {
                     recorder,
                     scope: Some(scope),
                 }
+            }
+        }
+
+        impl<'a, R: ProfilerCommandRecorder> ScopeExt<R> for $scope<'a, R> {
+            #[inline(always)]
+            fn scope(&mut self, label: impl Into<String>, device: &wgpu::Device) -> Scope<'_, R> {
+                $scope::scope(self, label, device)
             }
         }
 
@@ -156,6 +193,27 @@ macro_rules! impl_scope_ext {
                     recorder: render_pass,
                     scope: Some(child_scope),
                 }
+            }
+        }
+
+        impl PassEncoderExt for $scope<'_, wgpu::CommandEncoder> {
+            #[track_caller]
+            fn scoped_render_pass<'a>(
+                &'a mut self,
+                label: impl Into<String>,
+                device: &wgpu::Device,
+                pass_descriptor: wgpu::RenderPassDescriptor<'_>,
+            ) -> OwningScope<'a, wgpu::RenderPass<'a>> {
+                $scope::scoped_render_pass(self, label, device, pass_descriptor)
+            }
+
+            #[track_caller]
+            fn scoped_compute_pass<'a>(
+                &'a mut self,
+                label: impl Into<String>,
+                device: &wgpu::Device,
+            ) -> OwningScope<'a, wgpu::ComputePass<'a>> {
+                $scope::scoped_compute_pass(self, label, device)
             }
         }
 

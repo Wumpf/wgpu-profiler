@@ -115,4 +115,4 @@ pub use profiler::GpuProfiler;
 pub use profiler_command_recorder::ProfilerCommandRecorder;
 pub use profiler_query::{GpuProfilerQuery, GpuTimerQueryResult};
 pub use profiler_settings::GpuProfilerSettings;
-pub use scope::{ManualOwningScope, OwningScope, Scope};
+pub use scope::{ManualOwningScope, OwningScope, PassEncoderExt, Scope, ScopeExt};
