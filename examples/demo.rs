@@ -223,9 +223,36 @@ impl ApplicationHandler<()> for State {
             WindowEvent::RedrawRequested => {
                 profiling::scope!("Redraw Requested");
 
-                let frame = surface
-                    .get_current_texture()
-                    .expect("Failed to acquire next surface texture");
+                let mut frame;
+                let mut i = 0;
+                loop {
+                    i += 1;
+                    frame = match surface.get_current_texture() {
+                        Ok(frame) => frame,
+                        Err(err) => match err {
+                            wgpu::SurfaceError::Timeout => {
+                                if i > 10 {
+                                    return;
+                                }
+                                continue;
+                            }
+
+                            wgpu::SurfaceError::Outdated => {
+                                if i > 10 {
+                                    return;
+                                }
+                                surface.configure(&device, surface_desc);
+                                continue;
+                            }
+
+                            wgpu::SurfaceError::Lost | wgpu::SurfaceError::OutOfMemory => {
+                                panic!("Failed to acquire next surface texture: {err}");
+                            }
+                        },
+                    };
+                    break;
+                }
+
                 let frame_view = frame
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
@@ -342,7 +369,7 @@ fn draw(
 
         {
             let mut rpass = rpass.scope("fractal 2", device);
-            rpass.draw(0..6, 0..1);
+            rpass.draw(0..6, 2..3);
         };
     }
 
@@ -377,7 +404,7 @@ fn draw(
             let query = profiler
                 .begin_query("fractal 3", &mut rpass, device)
                 .with_parent(Some(&pass_scope));
-            rpass.draw(0..6, 2..3);
+            rpass.draw(0..6, 3..4);
 
             // Don't forget to end the query!
             profiler.end_query(&mut rpass, query);
@@ -385,7 +412,7 @@ fn draw(
         // Another variant is to use `ManualOwningScope`, forming a middle ground between no scope helpers and fully automatic scope closing.
         let mut rpass = {
             let mut rpass = profiler.manual_owning_scope("fractal 3", rpass, device);
-            rpass.draw(0..6, 3..4);
+            rpass.draw(0..6, 4..5);
 
             // Don't forget to end the scope.
             // Ending a `ManualOwningScope` will return the pass or encoder it owned.
