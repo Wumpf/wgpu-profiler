@@ -109,6 +109,8 @@ mod profiler_settings;
 mod scope;
 #[cfg(feature = "tracy")]
 mod tracy;
+#[cfg(feature = "puffin")]
+pub mod puffin;
 
 pub use errors::{CreationError, EndFrameError, SettingsError};
 pub use profiler::GpuProfiler;

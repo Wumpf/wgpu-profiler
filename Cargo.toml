@@ -13,7 +13,9 @@ license = "MIT OR Apache-2.0"
 clippy.doc_markdown = "warn"
 
 [features]
+default=["puffin"]
 tracy = ["dep:tracy-client", "profiling/profile-with-tracy"]
+puffin = ["dep:puffin", "profiling/profile-with-puffin"]
 
 [lib]
 
@@ -23,10 +25,11 @@ thiserror = "1"
 wgpu = "22.1.0"
 
 tracy-client = { version = "0.17", optional = true }
-
+puffin = { version = "0.19.1", optional = true }
 
 [dev-dependencies]
 futures-lite = "2"
-profiling = { version = "1" }
+profiling = "1"
+puffin_http = "0.16.1"
 tracy-client = "0.17.0"
 winit = "0.30"
