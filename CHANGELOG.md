@@ -1,6 +1,7 @@
 # Change Log
 
 ## Unreleased
+* fix issues with multiple calls to `GpuProfiler::resolve_queries` per frame, in [#79](https://github.com/Wumpf/wgpu-profiler/pull/79)
 
 ## 0.18.0
 * update to wgpu 22.1.0, by @waywardmonkeys in [#75](https://github.com/Wumpf/wgpu-profiler/pull/75)

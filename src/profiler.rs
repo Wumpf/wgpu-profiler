@@ -355,23 +355,28 @@ impl GpuProfiler {
 
             assert!(num_resolved_queries < num_used_queries);
 
+            // Resolve into offset 0 of the resolve buffer - this way we don't have to worry about
+            // the offset restrictions on resolve buffers (`wgpu::QUERY_RESOLVE_BUFFER_ALIGNMENT`)
+            // and we copy it anyways.
             encoder.resolve_query_set(
                 &query_pool.query_set,
                 num_resolved_queries..num_used_queries,
                 &query_pool.resolve_buffer,
-                (num_resolved_queries * wgpu::QUERY_SIZE) as u64,
+                0,
             );
-            query_pool
-                .num_resolved_queries
-                .store(num_used_queries, Ordering::Release);
-
+            // Copy the resolved queries into the read buffer, making sure
+            // that we don't override any of the results that are already there.
             encoder.copy_buffer_to_buffer(
                 &query_pool.resolve_buffer,
                 0,
                 &query_pool.read_buffer,
-                0,
+                (num_resolved_queries * wgpu::QUERY_SIZE) as u64,
                 (num_used_queries * wgpu::QUERY_SIZE) as u64,
             );
+
+            query_pool
+                .num_resolved_queries
+                .store(num_used_queries, Ordering::Release);
         }
     }
 

@@ -1,6 +1,7 @@
 mod dropped_frame_handling;
 mod errors;
 mod interleaved_command_buffer;
+mod multiple_resolves_per_frame;
 mod nested_scopes;
 
 pub fn create_device(
