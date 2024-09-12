@@ -1,6 +1,6 @@
 # Change Log
 
-## Unreleased
+## 0.18.1
 * fix issues with multiple calls to `GpuProfiler::resolve_queries` per frame, in [#79](https://github.com/Wumpf/wgpu-profiler/pull/79)
 
 ## 0.18.0
