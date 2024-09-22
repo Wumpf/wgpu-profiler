@@ -13,7 +13,6 @@ license = "MIT OR Apache-2.0"
 clippy.doc_markdown = "warn"
 
 [features]
-default=["puffin"]
 tracy = ["dep:tracy-client", "profiling/profile-with-tracy"]
 puffin = ["dep:puffin", "profiling/profile-with-puffin"]
 

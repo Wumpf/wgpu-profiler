@@ -1,7 +1,4 @@
-use std::{
-    borrow::Cow,
-    sync::{Arc, LazyLock, Mutex},
-};
+use std::{borrow::Cow, sync::Arc};
 use wgpu_profiler::{GpuProfiler, GpuProfilerSettings, GpuTimerQueryResult};
 use winit::{
     application::ApplicationHandler,
@@ -11,11 +8,11 @@ use winit::{
 };
 
 #[cfg(feature = "puffin")]
-use puffin::GlobalProfiler;
-
-#[cfg(feature = "puffin")]
-static PUFFIN_GPU_PROFILER: LazyLock<Mutex<GlobalProfiler>> =
-    LazyLock::new(|| Mutex::new(GlobalProfiler::default()));
+// Since the timing information we get from WGPU may be several frames behind the CPU, we can't report these frames to
+// the singleton returned by `puffin::GlobalProfiler::lock`. Instead, we need our own `puffin::GlobalProfiler` that we
+// can be several frames behind puffin's main global profiler singleton.
+static PUFFIN_GPU_PROFILER: std::sync::LazyLock<std::sync::Mutex<puffin::GlobalProfiler>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(puffin::GlobalProfiler::default()));
 
 fn scopes_to_console_recursive(results: &[GpuTimerQueryResult], indentation: u32) {
     for scope in results {
@@ -149,26 +146,23 @@ impl GfxState {
 
         // Create a new profiler instance.
         #[cfg(feature = "tracy")]
-        let profiler = {
-            tracy_client::Client::start();
-            GpuProfiler::new_with_tracy_client(
-                GpuProfilerSettings::default(),
-                adapter.get_info().backend,
-                &device,
-                &queue,
-            )
-            .unwrap_or_else(|err| match err {
-                wgpu_profiler::CreationError::TracyClientNotRunning
-                | wgpu_profiler::CreationError::TracyGpuContextCreationError(_) => {
-                    println!("Failed to connect to Tracy. Continuing without Tracy integration.");
-                    GpuProfiler::new(GpuProfilerSettings::default())
-                        .expect("Failed to create profiler")
-                }
-                _ => {
-                    panic!("Failed to create profiler: {}", err);
-                }
-            })
-        };
+        let profiler = GpuProfiler::new_with_tracy_client(
+            GpuProfilerSettings::default(),
+            adapter.get_info().backend,
+            &device,
+            &queue,
+        )
+        .unwrap_or_else(|err| match err {
+            wgpu_profiler::CreationError::TracyClientNotRunning
+            | wgpu_profiler::CreationError::TracyGpuContextCreationError(_) => {
+                println!("Failed to connect to Tracy. Continuing without Tracy integration.");
+                GpuProfiler::new(GpuProfilerSettings::default()).expect("Failed to create profiler")
+            }
+            _ => {
+                panic!("Failed to create profiler: {}", err);
+            }
+        });
+
         #[cfg(not(feature = "tracy"))]
         let profiler =
             GpuProfiler::new(GpuProfilerSettings::default()).expect("Failed to create profiler");
@@ -409,6 +403,9 @@ fn draw(
 }
 
 fn main() {
+    #[cfg(feature = "tracy")]
+    tracy_client::Client::start();
+
     //env_logger::init_from_env(env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "warn"));
     let event_loop = EventLoop::new().unwrap();
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);

@@ -106,11 +106,11 @@ mod profiler;
 mod profiler_command_recorder;
 mod profiler_query;
 mod profiler_settings;
+#[cfg(feature = "puffin")]
+pub mod puffin;
 mod scope;
 #[cfg(feature = "tracy")]
 mod tracy;
-#[cfg(feature = "puffin")]
-pub mod puffin;
 
 pub use errors::{CreationError, EndFrameError, SettingsError};
 pub use profiler::GpuProfiler;

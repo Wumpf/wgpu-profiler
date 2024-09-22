@@ -5,7 +5,7 @@ use crate::GpuTimerQueryResult;
 /// Visualize the query results in a `puffin::GlobalProfiler`.
 pub fn output_frame_to_puffin(profiler: &mut GlobalProfiler, query_result: &[GpuTimerQueryResult]) {
     let mut stream_info = StreamInfo::default();
-    recusive_profile_gpu_frame(profiler, &mut stream_info, query_result, 0);
+    collect_stream_info_recursive(profiler, &mut stream_info, query_result, 0);
 
     profiler.report_user_scopes(
         ThreadInfo {
@@ -16,7 +16,7 @@ pub fn output_frame_to_puffin(profiler: &mut GlobalProfiler, query_result: &[Gpu
     );
 }
 
-fn recusive_profile_gpu_frame(
+fn collect_stream_info_recursive(
     profiler: &mut GlobalProfiler,
     stream_info: &mut StreamInfo,
     query_result: &[GpuTimerQueryResult],
@@ -38,7 +38,7 @@ fn recusive_profile_gpu_frame(
             stream_info.range_ns.1 = stream_info.range_ns.0.max(end);
 
             let (offset, _) = stream_info.stream.begin_scope(|| start, id, "");
-            recusive_profile_gpu_frame(profiler, stream_info, &query.nested_queries, depth + 1);
+            collect_stream_info_recursive(profiler, stream_info, &query.nested_queries, depth + 1);
             stream_info.stream.end_scope(offset, end as NanoSecond);
         }
     }
