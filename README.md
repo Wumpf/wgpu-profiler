@@ -8,7 +8,7 @@ Simple profiler scopes for wgpu using timer queries
 * Easy to use profiler scopes
   * Allows nesting!
   * Can be disabled by runtime flag
-  * Additionally generates debug markers 
+  * Additionally generates debug markers
   * Thread-safe - can profile several command encoder/buffers in parallel
 * Internally creates pools of timer queries automatically
   * Does not need to know in advance how many queries/profiling scopes are needed
@@ -17,6 +17,7 @@ Simple profiler scopes for wgpu using timer queries
 * Many profiler instances can live side by side
 * chrome trace flamegraph json export
 * Tracy integration (behind `tracy` feature flag)
+* Puffin integration (behind `puffin` feature flag)
 
 ## How to use
 
