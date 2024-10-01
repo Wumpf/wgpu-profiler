@@ -1,15 +1,19 @@
 # Change Log
 
-## Unreleased
+## 0.18.2
+* Fix `resolve_queries` calls per frame causing invalid buffer copy operations, in [#83](https://github.com/Wumpf/wgpu-profiler/pull/83)
+
+## 0.18.1
+* Fix issues with multiple calls to `GpuProfiler::resolve_queries` per frame, in [#79](https://github.com/Wumpf/wgpu-profiler/pull/79)
 
 ## 0.18.0
-* update to wgpu 22.1.0, by @waywardmonkeys in [#75](https://github.com/Wumpf/wgpu-profiler/pull/75)
+* Update to wgpu 22.1.0, by @waywardmonkeys in [#75](https://github.com/Wumpf/wgpu-profiler/pull/75)
 
 ## 0.17.0
-* update to wgpu 0.20
+* Update to wgpu 0.20
 * `GpuTimerQueryResult` are now also produced when timing is disabled for that scope
   * `GpuTimerQueryResult::time` is an `Option` now
-* update tracy client to 0.17.0
+* Update tracy client to 0.17.0
 
 ## 0.16.2
 
