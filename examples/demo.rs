@@ -112,6 +112,7 @@ impl GfxState {
                 .get_default_config(&adapter, size.width, size.height)
                 .unwrap()
         };
+        surface.configure(&device, &surface_desc);
 
         let swapchain_format = surface_desc.format;
 
