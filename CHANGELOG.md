@@ -1,5 +1,8 @@
 # Change Log
 
+## Unreleased
+* Update to wgpu 23.0.0, by @waywardmonkeys in [#88](https://github.com/Wumpf/wgpu-profiler/pull/88)
+
 ## 0.18.2
 * Fix `resolve_queries` calls per frame causing invalid buffer copy operations, in [#83](https://github.com/Wumpf/wgpu-profiler/pull/83)
 
