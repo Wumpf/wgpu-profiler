@@ -7,6 +7,13 @@ use winit::{
     keyboard::{KeyCode, PhysicalKey},
 };
 
+#[cfg(feature = "puffin")]
+// Since the timing information we get from WGPU may be several frames behind the CPU, we can't report these frames to
+// the singleton returned by `puffin::GlobalProfiler::lock`. Instead, we need our own `puffin::GlobalProfiler` that we
+// can be several frames behind puffin's main global profiler singleton.
+static PUFFIN_GPU_PROFILER: std::sync::LazyLock<std::sync::Mutex<puffin::GlobalProfiler>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(puffin::GlobalProfiler::default()));
+
 fn scopes_to_console_recursive(results: &[GpuTimerQueryResult], indentation: u32) {
     for scope in results {
         if indentation > 0 {
@@ -156,6 +163,7 @@ impl GfxState {
                 panic!("Failed to create profiler: {}", err);
             }
         });
+
         #[cfg(not(feature = "tracy"))]
         let profiler =
             GpuProfiler::new(GpuProfilerSettings::default()).expect("Failed to create profiler");
@@ -255,6 +263,15 @@ impl ApplicationHandler<()> for State {
                 self.latest_profiler_results =
                     profiler.process_finished_frame(queue.get_timestamp_period());
                 console_output(&self.latest_profiler_results, device.features());
+                #[cfg(feature = "puffin")]
+                {
+                    let mut gpu_profiler = PUFFIN_GPU_PROFILER.lock().unwrap();
+                    wgpu_profiler::puffin::output_frame_to_puffin(
+                        &mut gpu_profiler,
+                        self.latest_profiler_results.as_deref().unwrap_or_default(),
+                    );
+                    gpu_profiler.new_frame();
+                }
             }
 
             WindowEvent::KeyboardInput {
@@ -387,9 +404,24 @@ fn draw(
 }
 
 fn main() {
+    #[cfg(feature = "tracy")]
     tracy_client::Client::start();
+
     //env_logger::init_from_env(env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "warn"));
     let event_loop = EventLoop::new().unwrap();
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
+
+    #[cfg(feature = "puffin")]
+    let (_cpu_server, _gpu_server) = {
+        puffin::set_scopes_on(true);
+        let cpu_server =
+            puffin_http::Server::new(&format!("0.0.0.0:{}", puffin_http::DEFAULT_PORT)).unwrap();
+        let gpu_server = puffin_http::Server::new_custom(
+            &format!("0.0.0.0:{}", puffin_http::DEFAULT_PORT + 1),
+            |sink| PUFFIN_GPU_PROFILER.lock().unwrap().add_sink(sink),
+            |id| _ = PUFFIN_GPU_PROFILER.lock().unwrap().remove_sink(id),
+        );
+        (cpu_server, gpu_server)
+    };
     let _ = event_loop.run_app(&mut State::default());
 }
