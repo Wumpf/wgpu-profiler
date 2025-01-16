@@ -10,7 +10,7 @@ pub fn create_device(
     async fn create_default_device_async(
         features: wgpu::Features,
     ) -> Result<(wgpu::Backend, wgpu::Device, wgpu::Queue), wgpu::RequestDeviceError> {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY, // Workaround for wgl having issues with parallel device destruction.
             ..Default::default()
         });
