@@ -1,6 +1,7 @@
 # Change Log
 
 ## Unreleased
+* Update to wgpu 24.0.0, by @songhuaixu in [#90](https://github.com/Wumpf/wgpu-profiler/pull/90)
 
 ## 0.19.0
 * Update to wgpu 23.0.0, by @waywardmonkeys in [#88](https://github.com/Wumpf/wgpu-profiler/pull/88)

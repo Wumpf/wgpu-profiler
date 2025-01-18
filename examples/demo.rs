@@ -67,7 +67,7 @@ struct GfxState {
 impl GfxState {
     async fn new(window: &Arc<winit::window::Window>) -> Self {
         let size = window.inner_size();
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
         let surface = instance
             .create_surface(window.clone())
             .expect("Failed to create surface.");

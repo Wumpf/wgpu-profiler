@@ -12,7 +12,7 @@ pub struct Scope<'a, Recorder: ProfilerCommandRecorder> {
     pub scope: Option<GpuProfilerQuery>,
 }
 
-impl<'a, R: ProfilerCommandRecorder> Drop for Scope<'a, R> {
+impl<R: ProfilerCommandRecorder> Drop for Scope<'_, R> {
     #[inline]
     fn drop(&mut self) {
         if let Some(scope) = self.scope.take() {
@@ -30,7 +30,7 @@ pub struct OwningScope<'a, Recorder: ProfilerCommandRecorder> {
     pub scope: Option<GpuProfilerQuery>,
 }
 
-impl<'a, R: ProfilerCommandRecorder> Drop for OwningScope<'a, R> {
+impl<R: ProfilerCommandRecorder> Drop for OwningScope<'_, R> {
     #[inline]
     fn drop(&mut self) {
         if let Some(scope) = self.scope.take() {
@@ -51,7 +51,7 @@ pub struct ManualOwningScope<'a, Recorder: ProfilerCommandRecorder> {
     pub scope: Option<GpuProfilerQuery>,
 }
 
-impl<'a, R: ProfilerCommandRecorder> ManualOwningScope<'a, R> {
+impl<R: ProfilerCommandRecorder> ManualOwningScope<'_, R> {
     /// Ends the scope allowing the extraction of the owned [`ProfilerCommandRecorder`].
     #[track_caller]
     #[inline]
