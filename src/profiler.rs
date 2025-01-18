@@ -751,7 +751,7 @@ impl GpuProfiler {
                 // Note that inactive queries may still have nested queries, it's therefore important we process all of them.
                 // In particular, this happens if only `wgpu::Features::TIMESTAMP_QUERY`` is enabled and `timestamp_writes`
                 // on passes are nested inside inactive encoder timer queries.
-                let time = scope.timer_query_pair.take().map(|query| {
+                let time_raw = scope.timer_query_pair.take().map(|query| {
                     // Read timestamp from buffer.
                     // By design timestamps for start/end are consecutive.
                     let offset = (query.start_query_idx * wgpu::QUERY_SIZE) as u64;
@@ -771,19 +771,29 @@ impl GpuProfiler {
                             .unwrap(),
                     );
 
-                    #[cfg(feature = "tracy")]
-                    if let Some(tracy_scope) = scope.tracy_scope.take() {
-                        tracy_scope.upload_timestamp(start_raw as i64, end_raw as i64);
-                    }
-
-                    (start_raw as f64 * timestamp_to_sec)..(end_raw as f64 * timestamp_to_sec)
+                    start_raw..end_raw
                 });
+
+                let time = time_raw.as_ref().map(|time_raw| {
+                    (time_raw.start as f64 * timestamp_to_sec)
+                        ..(time_raw.end as f64 * timestamp_to_sec)
+                });
+
+                #[cfg(feature = "tracy")]
+                if let (Some(tracy_scope), Some(time_raw)) = (&scope.tracy_scope, &time_raw) {
+                    tracy_scope.upload_timestamp_start(time_raw.start as i64);
+                }
 
                 let nested_queries = Self::process_timings_recursive(
                     timestamp_to_sec,
                     closed_scope_by_parent_handle,
                     scope.handle,
                 );
+
+                #[cfg(feature = "tracy")]
+                if let (Some(tracy_scope), Some(time_raw)) = (&scope.tracy_scope, time_raw) {
+                    tracy_scope.upload_timestamp_end(time_raw.end as i64);
+                }
 
                 GpuTimerQueryResult {
                     label: std::mem::take(&mut scope.label),
