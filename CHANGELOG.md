@@ -1,6 +1,8 @@
 # Change Log
 
+
 ## Unreleased
+* Update to tracy-client 0.18.0, update to thiserror 2, in [#91](https://github.com/Wumpf/wgpu-profiler/pull/91)
 * Update to wgpu 24.0.0, by @songhuaixu in [#90](https://github.com/Wumpf/wgpu-profiler/pull/90)
 
 ## 0.19.0

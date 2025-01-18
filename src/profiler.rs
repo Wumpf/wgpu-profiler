@@ -773,7 +773,8 @@ impl GpuProfiler {
 
                     #[cfg(feature = "tracy")]
                     if let Some(tracy_scope) = scope.tracy_scope.take() {
-                        tracy_scope.upload_timestamp(start_raw as i64, end_raw as i64);
+                        tracy_scope.upload_timestamp_start(start_raw as i64);
+                        tracy_scope.upload_timestamp_end(end_raw as i64);
                     }
 
                     (start_raw as f64 * timestamp_to_sec)..(end_raw as f64 * timestamp_to_sec)
