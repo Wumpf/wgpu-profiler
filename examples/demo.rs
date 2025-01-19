@@ -232,9 +232,36 @@ impl ApplicationHandler<()> for State {
             WindowEvent::RedrawRequested => {
                 profiling::scope!("Redraw Requested");
 
-                let frame = surface
-                    .get_current_texture()
-                    .expect("Failed to acquire next surface texture");
+                let mut frame;
+                let mut i = 0;
+                loop {
+                    i += 1;
+                    frame = match surface.get_current_texture() {
+                        Ok(frame) => frame,
+                        Err(err) => match err {
+                            wgpu::SurfaceError::Timeout => {
+                                if i > 10 {
+                                    return;
+                                }
+                                continue;
+                            }
+
+                            wgpu::SurfaceError::Outdated => {
+                                if i > 10 {
+                                    return;
+                                }
+                                surface.configure(&device, surface_desc);
+                                continue;
+                            }
+
+                            wgpu::SurfaceError::Lost | wgpu::SurfaceError::OutOfMemory => {
+                                panic!("Failed to acquire next surface texture: {err}");
+                            }
+                        },
+                    };
+                    break;
+                }
+
                 let frame_view = frame
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
@@ -352,6 +379,18 @@ fn draw(
             rpass.draw(0..6, 1..2);
         }
     }
+
+    {
+        // You can also use traits to create your own helper functions on your scopes
+        let mut rpass = my_fancy_pass(&mut scope, device, view);
+        rpass.set_pipeline(render_pipeline);
+
+        {
+            let mut rpass = rpass.scope("fractal 2", device);
+            rpass.draw(0..6, 2..3);
+        };
+    }
+
     {
         // It's also possible to take timings by hand, manually calling `begin_query` and `end_query`.
         // This is generally not recommended as it's very easy to mess up by accident :)
@@ -381,9 +420,9 @@ fn draw(
         // Again, to do any actual timing, you need to enable wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES.
         {
             let query = profiler
-                .begin_query("fractal 2", &mut rpass, device)
+                .begin_query("fractal 3", &mut rpass, device)
                 .with_parent(Some(&pass_scope));
-            rpass.draw(0..6, 2..3);
+            rpass.draw(0..6, 3..4);
 
             // Don't forget to end the query!
             profiler.end_query(&mut rpass, query);
@@ -391,7 +430,7 @@ fn draw(
         // Another variant is to use `ManualOwningScope`, forming a middle ground between no scope helpers and fully automatic scope closing.
         let mut rpass = {
             let mut rpass = profiler.manual_owning_scope("fractal 3", rpass, device);
-            rpass.draw(0..6, 3..4);
+            rpass.draw(0..6, 4..5);
 
             // Don't forget to end the scope.
             // Ending a `ManualOwningScope` will return the pass or encoder it owned.
@@ -401,6 +440,31 @@ fn draw(
         // Don't forget to end the scope.
         profiler.end_query(&mut rpass, pass_scope);
     }
+}
+
+pub fn my_fancy_pass<'b, E: wgpu_profiler::PassEncoderExt>(
+    e: &'b mut E,
+    device: &wgpu::Device,
+    view: &wgpu::TextureView,
+) -> wgpu_profiler::OwningScope<'b, wgpu::RenderPass<'b>> {
+    e.scoped_render_pass(
+        "My Fancy Pass!",
+        device,
+        wgpu::RenderPassDescriptor {
+            label: None,
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            occlusion_query_set: None,
+            ..Default::default()
+        },
+    )
 }
 
 fn main() {
