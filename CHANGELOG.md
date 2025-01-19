@@ -1,6 +1,7 @@
 # Change Log
 
 ## Unreleased
+* Integration with puffin, by @gonkalbell in [#81](https://github.com/Wumpf/wgpu-profiler/pull/81)
 
 ## 0.20.0
 * Update to tracy-client 0.18.0, update to thiserror 2, in [#91](https://github.com/Wumpf/wgpu-profiler/pull/91)

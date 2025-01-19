@@ -85,6 +85,29 @@ if let Some(profiling_data) = profiler.process_finished_frame(queue.get_timestam
 ```
 Check also the [Example](https://github.com/Wumpf/wgpu-profiler/blob/main/examples/demo.rs) where everything can be seen in action.
 
+## Tracy integration
+
+If you want to use [tracy](https://github.com/wolfpld/tracy) for profiling, you can enable the `tracy` feature.
+
+This adds `wgpu_profiler::new_with_tracy_client` which will automatically report profiling data to tracy.
+
+For details check the example code.
+
+## Puffin integration
+
+If you want to use [puffin](https://github.com/EmbarkStudios/puffin) for profiling, you can enable the `puffin` feature.
+
+This adds `wgpu_profiler::puffin::output_frame_to_puffin` which makes it easy to report profiling data to a `puffin::GlobalProfiler`.
+
+You can run the demo example with puffin by running `cargo run --example demo --features puffin`.
+All CPU profiling goes to port `8585`, all GPU profiling goes to port `8586`. You can open puffin viewers for both.
+```sh
+puffin_viewer --url 127.0.0.1:8585
+puffin_viewer --url 127.0.0.1:8586
+```
+
+For details check the example code.
+
 # Internals
 
 For every frame that hasn't completely finished processing yet
@@ -106,6 +129,8 @@ mod profiler;
 mod profiler_command_recorder;
 mod profiler_query;
 mod profiler_settings;
+#[cfg(feature = "puffin")]
+pub mod puffin;
 mod scope;
 #[cfg(feature = "tracy")]
 mod tracy;
