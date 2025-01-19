@@ -74,7 +74,7 @@ struct GfxState {
 impl GfxState {
     async fn new(window: &Arc<winit::window::Window>) -> Self {
         let size = window.inner_size();
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
         let surface = instance
             .create_surface(window.clone())
             .expect("Failed to create surface.");
@@ -119,6 +119,7 @@ impl GfxState {
                 .get_default_config(&adapter, size.width, size.height)
                 .unwrap()
         };
+        surface.configure(&device, &surface_desc);
 
         let swapchain_format = surface_desc.format;
 
@@ -127,13 +128,13 @@ impl GfxState {
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: "vs_main",
+                entry_point: Some("vs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 buffers: &[],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
-                entry_point: "fs_main",
+                entry_point: Some("fs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 targets: &[Some(swapchain_format.into())],
             }),

@@ -12,7 +12,7 @@ pub struct Scope<'a, Recorder: ProfilerCommandRecorder> {
     pub scope: Option<GpuProfilerQuery>,
 }
 
-impl<'a, R: ProfilerCommandRecorder> Drop for Scope<'a, R> {
+impl<R: ProfilerCommandRecorder> Drop for Scope<'_, R> {
     #[inline]
     fn drop(&mut self) {
         if let Some(scope) = self.scope.take() {
@@ -30,7 +30,7 @@ pub struct OwningScope<'a, Recorder: ProfilerCommandRecorder> {
     pub scope: Option<GpuProfilerQuery>,
 }
 
-impl<'a, R: ProfilerCommandRecorder> Drop for OwningScope<'a, R> {
+impl<R: ProfilerCommandRecorder> Drop for OwningScope<'_, R> {
     #[inline]
     fn drop(&mut self) {
         if let Some(scope) = self.scope.take() {
@@ -51,7 +51,7 @@ pub struct ManualOwningScope<'a, Recorder: ProfilerCommandRecorder> {
     pub scope: Option<GpuProfilerQuery>,
 }
 
-impl<'a, R: ProfilerCommandRecorder> ManualOwningScope<'a, R> {
+impl<R: ProfilerCommandRecorder> ManualOwningScope<'_, R> {
     /// Ends the scope allowing the extraction of the owned [`ProfilerCommandRecorder`].
     #[track_caller]
     #[inline]
@@ -99,6 +99,8 @@ macro_rules! impl_scope_ext {
             /// Ignores passed `wgpu::RenderPassDescriptor::timestamp_writes` and replaces it with
             /// `timestamp_writes` managed by `GpuProfiler` if profiling is enabled.
             ///
+            /// This also sets the `wgpu::RenderPassDescriptor::label` if it's `None` (default).
+            ///
             /// Note that in order to take measurements, this requires the [`wgpu::Features::TIMESTAMP_QUERY`] feature.
             /// [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS`] & [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES`] are not required.
             #[track_caller]
@@ -116,6 +118,7 @@ macro_rules! impl_scope_ext {
                     .recorder
                     .begin_render_pass(&wgpu::RenderPassDescriptor {
                         timestamp_writes: child_scope.render_pass_timestamp_writes(),
+                        label: pass_descriptor.label.or(Some(&child_scope.label)),
                         ..pass_descriptor
                     });
 

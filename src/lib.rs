@@ -11,7 +11,7 @@ and allows you to create to create timer scopes with minimal overhead!
 use wgpu_profiler::*;
 
 # async fn wgpu_init() -> (wgpu::Instance, wgpu::Adapter, wgpu::Device, wgpu::Queue) {
-    # let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
+    # let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
     # let adapter = instance.request_adapter(&wgpu::RequestAdapterOptions::default()).await.unwrap();
     # let (device, queue) = adapter
     #     .request_device(
@@ -34,7 +34,7 @@ use wgpu_profiler::*;
 #        label: None,
 #        layout: None,
 #        module: &cs_module,
-#        entry_point: "main",
+#        entry_point: Some("main"),
 #        compilation_options: wgpu::PipelineCompilationOptions::default(),
 #        cache: None,
 #    });
