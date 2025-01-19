@@ -1,6 +1,6 @@
 # Change Log
 
-## Unreleased
+## 0.21.0
 * Integration with puffin, by @gonkalbell in [#81](https://github.com/Wumpf/wgpu-profiler/pull/81)
 
 ## 0.20.0
