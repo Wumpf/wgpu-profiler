@@ -95,6 +95,11 @@ impl GpuProfiler {
         Ok(profiler)
     }
 
+    /// Returns currently active settings.
+    pub fn settings(&self) -> &GpuProfilerSettings {
+        &self.settings
+    }
+
     /// Changes the settings of an existing profiler.
     ///
     /// If timer scopes are disabled by setting [`GpuProfilerSettings::enable_timer_queries`] to false,
