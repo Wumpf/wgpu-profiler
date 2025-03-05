@@ -157,7 +157,8 @@ impl GfxState {
             wgpu_profiler::CreationError::TracyClientNotRunning
             | wgpu_profiler::CreationError::TracyGpuContextCreationError(_) => {
                 println!("Failed to connect to Tracy. Continuing without Tracy integration.");
-                GpuProfiler::new(GpuProfilerSettings::default()).expect("Failed to create profiler")
+                GpuProfiler::new(&device, GpuProfilerSettings::default())
+                    .expect("Failed to create profiler")
             }
             _ => {
                 panic!("Failed to create profiler: {}", err);
