@@ -75,15 +75,11 @@ macro_rules! impl_scope_ext {
             #[must_use]
             #[track_caller]
             #[inline]
-            pub fn scope(
-                &mut self,
-                label: impl Into<String>,
-                device: &wgpu::Device,
-            ) -> Scope<'_, R> {
+            pub fn scope(&mut self, label: impl Into<String>) -> Scope<'_, R> {
                 let recorder: &mut R = &mut self.recorder;
                 let scope = self
                     .profiler
-                    .begin_query(label, recorder, device)
+                    .begin_query(label, recorder)
                     .with_parent(self.scope.as_ref());
                 Scope {
                     profiler: self.profiler,
@@ -107,12 +103,11 @@ macro_rules! impl_scope_ext {
             pub fn scoped_render_pass<'b>(
                 &'b mut self,
                 label: impl Into<String>,
-                device: &wgpu::Device,
                 pass_descriptor: wgpu::RenderPassDescriptor<'_>,
             ) -> OwningScope<'b, wgpu::RenderPass<'b>> {
                 let child_scope = self
                     .profiler
-                    .begin_pass_query(label, &mut self.recorder, device)
+                    .begin_pass_query(label, &mut self.recorder)
                     .with_parent(self.scope.as_ref());
                 let render_pass = self
                     .recorder
@@ -140,11 +135,10 @@ macro_rules! impl_scope_ext {
             pub fn scoped_compute_pass<'b>(
                 &'b mut self,
                 label: impl Into<String>,
-                device: &wgpu::Device,
             ) -> OwningScope<'b, wgpu::ComputePass<'b>> {
                 let child_scope = self
                     .profiler
-                    .begin_pass_query(label, &mut self.recorder, device)
+                    .begin_pass_query(label, &mut self.recorder)
                     .with_parent(self.scope.as_ref());
 
                 let render_pass = self

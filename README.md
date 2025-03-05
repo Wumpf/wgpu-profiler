@@ -25,19 +25,19 @@ Create a new profiler object:
 ```rust
 use wgpu_profiler::{wgpu_profiler, GpuProfiler, GpuProfilerSettings};
 // ...
-let mut profiler = GpuProfiler::new(GpuProfilerSettings::default());
+let mut profiler = GpuProfiler::new(&device, GpuProfilerSettings::default());
 ```
 
 Now you can start creating profiler scopes:
 ```rust
 // You can now open profiling scopes on any encoder or pass:
-let mut scope = profiler.scope("name of your scope", &mut encoder, &device);
+let mut scope = profiler.scope("name of your scope", &mut encoder);
 
 // Scopes can be nested arbitrarily!
-let mut nested_scope = scope.scope("nested!", &device);
+let mut nested_scope = scope.scope("nested!");
 
 // Scopes on encoders can be used to easily create profiled passes!
-let mut compute_pass = nested_scope.scoped_compute_pass("profiled compute", &device);
+let mut compute_pass = nested_scope.scoped_compute_pass("profiled compute");
 
 // Scopes expose the underlying encoder or pass they wrap:
 compute_pass.set_pipeline(&pipeline);

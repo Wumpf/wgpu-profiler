@@ -11,7 +11,8 @@ fn multiple_resolves_per_frame() {
     .unwrap();
 
     let mut profiler =
-        wgpu_profiler::GpuProfiler::new(wgpu_profiler::GpuProfilerSettings::default()).unwrap();
+        wgpu_profiler::GpuProfiler::new(&device, wgpu_profiler::GpuProfilerSettings::default())
+            .unwrap();
 
     {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
@@ -21,7 +22,7 @@ fn multiple_resolves_per_frame() {
         // https://github.com/Wumpf/wgpu-profiler/issues/82
         for i in 0..NUM_SCOPES {
             {
-                let _ = profiler.scope(format!("{i}"), &mut encoder, &device);
+                let _ = profiler.scope(format!("{i}"), &mut encoder);
             }
             profiler.resolve_queries(&mut encoder);
         }

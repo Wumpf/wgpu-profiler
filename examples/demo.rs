@@ -165,8 +165,8 @@ impl GfxState {
         });
 
         #[cfg(not(feature = "tracy"))]
-        let profiler =
-            GpuProfiler::new(GpuProfilerSettings::default()).expect("Failed to create profiler");
+        let profiler = GpuProfiler::new(&device, GpuProfilerSettings::default())
+            .expect("Failed to create profiler");
 
         Self {
             surface,
@@ -241,7 +241,7 @@ impl ApplicationHandler<()> for State {
                 let mut encoder =
                     device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
-                draw(profiler, &mut encoder, &frame_view, device, render_pipeline);
+                draw(profiler, &mut encoder, &frame_view, render_pipeline);
 
                 // Resolves any queries that might be in flight.
                 profiler.resolve_queries(&mut encoder);
@@ -312,11 +312,10 @@ fn draw(
     profiler: &GpuProfiler,
     encoder: &mut wgpu::CommandEncoder,
     view: &wgpu::TextureView,
-    device: &wgpu::Device,
     render_pipeline: &wgpu::RenderPipeline,
 ) {
     // Create a new profiling scope that we nest the other scopes in.
-    let mut scope = profiler.scope("rendering", encoder, device);
+    let mut scope = profiler.scope("rendering", encoder);
     // For demonstration purposes we divide our scene into two render passes.
     {
         // Once we created a scope, we can use it to create nested scopes within.
@@ -324,7 +323,6 @@ fn draw(
         // But just as before, it behaves like a transparent wrapper, so you can use it just like a normal render pass.
         let mut rpass = scope.scoped_render_pass(
             "render pass top",
-            device,
             wgpu::RenderPassDescriptor {
                 label: None,
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -344,11 +342,11 @@ fn draw(
         // Sub-scopes within the pass only work if wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES is enabled.
         // If this feature is lacking, no timings will be taken.
         {
-            let mut rpass = rpass.scope("fractal 0", device);
+            let mut rpass = rpass.scope("fractal 0");
             rpass.draw(0..6, 0..1);
         };
         {
-            let mut rpass = rpass.scope("fractal 1", device);
+            let mut rpass = rpass.scope("fractal 1");
             rpass.draw(0..6, 1..2);
         }
     }
@@ -356,7 +354,7 @@ fn draw(
         // It's also possible to take timings by hand, manually calling `begin_query` and `end_query`.
         // This is generally not recommended as it's very easy to mess up by accident :)
         let pass_scope = profiler
-            .begin_pass_query("render pass bottom", scope.recorder, device)
+            .begin_pass_query("render pass bottom", scope.recorder)
             .with_parent(scope.scope.as_ref());
         let mut rpass = scope
             .recorder
@@ -381,7 +379,7 @@ fn draw(
         // Again, to do any actual timing, you need to enable wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES.
         {
             let query = profiler
-                .begin_query("fractal 2", &mut rpass, device)
+                .begin_query("fractal 2", &mut rpass)
                 .with_parent(Some(&pass_scope));
             rpass.draw(0..6, 2..3);
 
@@ -390,7 +388,7 @@ fn draw(
         }
         // Another variant is to use `ManualOwningScope`, forming a middle ground between no scope helpers and fully automatic scope closing.
         let mut rpass = {
-            let mut rpass = profiler.manual_owning_scope("fractal 3", rpass, device);
+            let mut rpass = profiler.manual_owning_scope("fractal 3", rpass);
             rpass.draw(0..6, 3..4);
 
             // Don't forget to end the scope.
