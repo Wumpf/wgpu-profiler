@@ -1,5 +1,8 @@
 # Change Log
 
+## Unrelease
+* Device no longer needs to be passed for scope/start-query/end-query, in [#93](https://github.com/Wumpf/wgpu-profiler/pull/93)
+
 ## 0.21.1
 * Add accessor for settings.
 

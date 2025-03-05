@@ -8,18 +8,18 @@ use super::create_device;
 fn interleaved_scopes() {
     let (_, device, queue) = create_device(wgpu::Features::TIMESTAMP_QUERY).unwrap();
 
-    let mut profiler = GpuProfiler::new(GpuProfilerSettings::default()).unwrap();
+    let mut profiler = GpuProfiler::new(&device, GpuProfilerSettings::default()).unwrap();
 
     let mut encoder0 = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
     let mut encoder1 = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
 
     {
-        let mut e0_s0 = profiler.scope("e0_s0", &mut encoder0, &device);
-        let mut e1_s0 = profiler.scope("e1_s0", &mut encoder1, &device);
+        let mut e0_s0 = profiler.scope("e0_s0", &mut encoder0);
+        let mut e1_s0 = profiler.scope("e1_s0", &mut encoder1);
 
-        drop(e0_s0.scope("e0_s0_s0", &device));
-        drop(e0_s0.scope("e0_s0_s1", &device));
-        drop(e1_s0.scope("e1_s0_s0", &device));
+        drop(e0_s0.scope("e0_s0_s0"));
+        drop(e0_s0.scope("e0_s0_s1"));
+        drop(e1_s0.scope("e1_s0_s0"));
     }
 
     profiler.resolve_queries(&mut encoder0);
@@ -66,7 +66,7 @@ fn interleaved_scopes() {
 fn multithreaded_scopes() {
     let (_, device, queue) = create_device(wgpu::Features::TIMESTAMP_QUERY).unwrap();
 
-    let mut profiler = GpuProfiler::new(GpuProfilerSettings::default()).unwrap();
+    let mut profiler = GpuProfiler::new(&device, GpuProfilerSettings::default()).unwrap();
 
     const NUM_SCOPES_PER_THREAD: usize = 1000;
 
@@ -78,7 +78,7 @@ fn multithreaded_scopes() {
             barrier.wait();
 
             for i in 0..NUM_SCOPES_PER_THREAD {
-                let _ = profiler.scope(format!("e0_s{i}"), &mut encoder, &device);
+                let _ = profiler.scope(format!("e0_s{i}"), &mut encoder);
             }
             encoder.finish()
         });
@@ -88,7 +88,7 @@ fn multithreaded_scopes() {
             barrier.wait();
 
             for i in 0..NUM_SCOPES_PER_THREAD {
-                let _ = profiler.scope(format!("e1_s{i}"), &mut encoder, &device);
+                let _ = profiler.scope(format!("e1_s{i}"), &mut encoder);
             }
             encoder.finish()
         });

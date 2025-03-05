@@ -11,17 +11,20 @@ fn handle_dropped_frames_gracefully() {
     .unwrap();
 
     // max_num_pending_frames is one!
-    let mut profiler = wgpu_profiler::GpuProfiler::new(GpuProfilerSettings {
-        max_num_pending_frames: 1,
-        ..Default::default()
-    })
+    let mut profiler = wgpu_profiler::GpuProfiler::new(
+        &device,
+        GpuProfilerSettings {
+            max_num_pending_frames: 1,
+            ..Default::default()
+        },
+    )
     .unwrap();
 
     // Two frames without device poll, causing the profiler to drop a frame on the second round.
     for _ in 0..2 {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
         {
-            let _ = profiler.scope("testscope", &mut encoder, &device);
+            let _ = profiler.scope("testscope", &mut encoder);
         }
         profiler.resolve_queries(&mut encoder);
         profiler.end_frame().unwrap();

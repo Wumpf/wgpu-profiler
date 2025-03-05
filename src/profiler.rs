@@ -20,9 +20,11 @@ use crate::{
 ///
 /// Any query creation method may allocate a new [`wgpu::QuerySet`] and [`wgpu::Buffer`] internally if necessary.
 ///
-/// After the first call that passes [`wgpu::Device`], the same device must be used with all subsequent
-/// calls to [`GpuProfiler`] and all passed references to wgpu objects must originate from that device.
+/// [`GpuProfiler`] is associated with a single [`wgpu::Device`] upon creation.
+/// All references wgpu objects passed in subsequent calls must originate from that device.
 pub struct GpuProfiler {
+    device: wgpu::Device,
+
     unused_pools: Vec<QueryPool>,
 
     active_frame: ActiveFrame,
@@ -53,12 +55,17 @@ impl GpuProfiler {
     /// Creates a new Profiler object.
     ///
     /// There is nothing preventing the use of several independent profiler objects.
-    pub fn new(settings: GpuProfilerSettings) -> Result<Self, CreationError> {
+    pub fn new(
+        device: &wgpu::Device,
+        settings: GpuProfilerSettings,
+    ) -> Result<Self, CreationError> {
         settings.validate()?;
 
         let (closed_scope_sender, closed_scope_receiver) = std::sync::mpsc::channel();
 
         Ok(GpuProfiler {
+            device: device.clone(),
+
             unused_pools: Vec::new(),
 
             pending_frames: Vec::with_capacity(settings.max_num_pending_frames),
@@ -88,7 +95,7 @@ impl GpuProfiler {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) -> Result<Self, CreationError> {
-        let mut profiler = Self::new(settings)?;
+        let mut profiler = Self::new(device, settings)?;
         profiler.tracy_context = Some(crate::tracy::create_tracy_gpu_client(
             backend, device, queue,
         )?);
@@ -137,9 +144,8 @@ impl GpuProfiler {
         &'a self,
         label: impl Into<String>,
         encoder_or_pass: &'a mut Recorder,
-        device: &wgpu::Device,
     ) -> Scope<'a, Recorder> {
-        let scope = self.begin_query(label, encoder_or_pass, device);
+        let scope = self.begin_query(label, encoder_or_pass);
         Scope {
             profiler: self,
             recorder: encoder_or_pass,
@@ -163,13 +169,12 @@ impl GpuProfiler {
     #[must_use]
     #[track_caller]
     #[inline]
-    pub fn owning_scope<'a, Recorder: ProfilerCommandRecorder>(
-        &'a self,
+    pub fn owning_scope<Recorder: ProfilerCommandRecorder>(
+        &'_ self,
         label: impl Into<String>,
         mut encoder_or_pass: Recorder,
-        device: &wgpu::Device,
-    ) -> OwningScope<'a, Recorder> {
-        let scope = self.begin_query(label, &mut encoder_or_pass, device);
+    ) -> OwningScope<'_, Recorder> {
+        let scope = self.begin_query(label, &mut encoder_or_pass);
         OwningScope {
             profiler: self,
             recorder: encoder_or_pass,
@@ -196,13 +201,12 @@ impl GpuProfiler {
     #[must_use]
     #[track_caller]
     #[inline]
-    pub fn manual_owning_scope<'a, Recorder: ProfilerCommandRecorder>(
-        &'a self,
+    pub fn manual_owning_scope<Recorder: ProfilerCommandRecorder>(
+        &self,
         label: impl Into<String>,
         mut encoder_or_pass: Recorder,
-        device: &wgpu::Device,
-    ) -> ManualOwningScope<'a, Recorder> {
-        let scope = self.begin_query(label, &mut encoder_or_pass, device);
+    ) -> ManualOwningScope<'_, Recorder> {
+        let scope = self.begin_query(label, &mut encoder_or_pass);
         ManualOwningScope {
             profiler: self,
             recorder: encoder_or_pass,
@@ -229,15 +233,10 @@ impl GpuProfiler {
         &self,
         label: impl Into<String>,
         encoder_or_pass: &mut Recorder,
-        device: &wgpu::Device,
     ) -> GpuProfilerQuery {
         let is_for_pass_timestamp_writes = false;
-        let mut query = self.begin_query_internal(
-            label.into(),
-            is_for_pass_timestamp_writes,
-            encoder_or_pass,
-            device,
-        );
+        let mut query =
+            self.begin_query_internal(label.into(), is_for_pass_timestamp_writes, encoder_or_pass);
         if let Some(timer_query) = &mut query.timer_query_pair {
             encoder_or_pass
                 .write_timestamp(&timer_query.pool.query_set, timer_query.start_query_idx);
@@ -268,11 +267,10 @@ impl GpuProfiler {
         &self,
         label: impl Into<String>,
         encoder: &mut wgpu::CommandEncoder,
-        device: &wgpu::Device,
     ) -> GpuProfilerQuery {
         let is_for_pass_timestamp_writes = true;
         let mut query =
-            self.begin_query_internal(label.into(), is_for_pass_timestamp_writes, encoder, device);
+            self.begin_query_internal(label.into(), is_for_pass_timestamp_writes, encoder);
         if let Some(timer_query) = &mut query.timer_query_pair {
             timer_query.usage_state = QueryPairUsageState::ReservedForPassTimestampWrites;
         }
@@ -628,7 +626,7 @@ impl GpuProfiler {
 
     // Reserves two query objects.
     // Our query pools always have an even number of queries, so we know the next query is the next in the same pool.
-    fn reserve_query_pair(&self, device: &wgpu::Device) -> ReservedTimerQueryPair {
+    fn reserve_query_pair(&self) -> ReservedTimerQueryPair {
         // First, try to allocate from current top pool.
         // Requires taking a read lock on the current query pool.
         {
@@ -670,7 +668,7 @@ impl GpuProfiler {
                         .sum::<u32>()
                         .max(self.size_for_new_query_pools)
                         .min(QUERY_SET_MAX_QUERIES),
-                    device,
+                    &self.device,
                 ))
             };
 
@@ -689,7 +687,6 @@ impl GpuProfiler {
         label: String,
         is_for_pass_timestamp_writes: bool,
         encoder_or_pass: &mut Recorder,
-        device: &wgpu::Device,
     ) -> GpuProfilerQuery {
         // Give opening/closing queries acquire/release semantics:
         // This way, we won't get any nasty surprises when observing zero open queries.
@@ -699,9 +696,9 @@ impl GpuProfiler {
             && timestamp_query_support(
                 is_for_pass_timestamp_writes,
                 encoder_or_pass,
-                device.features(),
+                self.device.features(),
             ) {
-            Some(self.reserve_query_pair(device))
+            Some(self.reserve_query_pair())
         } else {
             None
         };
