@@ -169,11 +169,11 @@ impl GpuProfiler {
     #[must_use]
     #[track_caller]
     #[inline]
-    pub fn owning_scope<'a, Recorder: ProfilerCommandRecorder>(
-        &'a self,
+    pub fn owning_scope<Recorder: ProfilerCommandRecorder>(
+        &'_ self,
         label: impl Into<String>,
         mut encoder_or_pass: Recorder,
-    ) -> OwningScope<'a, Recorder> {
+    ) -> OwningScope<'_, Recorder> {
         let scope = self.begin_query(label, &mut encoder_or_pass);
         OwningScope {
             profiler: self,
@@ -201,11 +201,11 @@ impl GpuProfiler {
     #[must_use]
     #[track_caller]
     #[inline]
-    pub fn manual_owning_scope<'a, Recorder: ProfilerCommandRecorder>(
-        &'a self,
+    pub fn manual_owning_scope<Recorder: ProfilerCommandRecorder>(
+        &self,
         label: impl Into<String>,
         mut encoder_or_pass: Recorder,
-    ) -> ManualOwningScope<'a, Recorder> {
+    ) -> ManualOwningScope<'_, Recorder> {
         let scope = self.begin_query(label, &mut encoder_or_pass);
         ManualOwningScope {
             profiler: self,

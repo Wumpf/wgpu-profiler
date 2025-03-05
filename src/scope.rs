@@ -100,11 +100,11 @@ macro_rules! impl_scope_ext {
             /// Note that in order to take measurements, this requires the [`wgpu::Features::TIMESTAMP_QUERY`] feature.
             /// [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS`] & [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES`] are not required.
             #[track_caller]
-            pub fn scoped_render_pass<'b>(
-                &'b mut self,
+            pub fn scoped_render_pass(
+                &mut self,
                 label: impl Into<String>,
                 pass_descriptor: wgpu::RenderPassDescriptor<'_>,
-            ) -> OwningScope<'b, wgpu::RenderPass<'b>> {
+            ) -> OwningScope<'_, wgpu::RenderPass<'_>> {
                 let child_scope = self
                     .profiler
                     .begin_pass_query(label, &mut self.recorder)
@@ -132,10 +132,10 @@ macro_rules! impl_scope_ext {
             /// Note that in order to take measurements, this requires the [`wgpu::Features::TIMESTAMP_QUERY`] feature.
             /// [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS`] & [`wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES`] are not required.
             #[track_caller]
-            pub fn scoped_compute_pass<'b>(
-                &'b mut self,
+            pub fn scoped_compute_pass(
+                &mut self,
                 label: impl Into<String>,
-            ) -> OwningScope<'b, wgpu::ComputePass<'b>> {
+            ) -> OwningScope<'_, wgpu::ComputePass<'_>> {
                 let child_scope = self
                     .profiler
                     .begin_pass_query(label, &mut self.recorder)
