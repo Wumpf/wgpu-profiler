@@ -37,6 +37,7 @@ pub struct GpuTimerQueryResult {
 /// [`GpuProfiler::begin_pass_query`]: crate::GpuProfiler::begin_pass_query
 /// [`GpuProfiler::begin_query`]: crate::GpuProfiler::begin_query
 /// [`GpuProfiler::end_query`]: crate::GpuProfiler::end_query
+#[derive(Debug)]
 pub struct GpuProfilerQuery {
     /// The label assigned to this query.
     /// Will be moved into [`GpuProfilerQuery::label`] once the query is fully processed.

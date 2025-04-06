@@ -22,6 +22,7 @@ use crate::{
 ///
 /// [`GpuProfiler`] is associated with a single [`wgpu::Device`] upon creation.
 /// All references wgpu objects passed in subsequent calls must originate from that device.
+#[derive(Debug)]
 pub struct GpuProfiler {
     device: wgpu::Device,
 
@@ -809,7 +810,7 @@ impl GpuProfiler {
     }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum QueryPairUsageState {
     /// Transitional state used upon creation.
     Reserved,
@@ -824,6 +825,7 @@ pub enum QueryPairUsageState {
     BothStartAndEndWritten,
 }
 
+#[derive(Debug)]
 pub struct ReservedTimerQueryPair {
     /// [`QueryPool`] on which both start & end queries of the scope are done.
     ///
@@ -890,7 +892,7 @@ impl QueryPool {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct PendingFramePools {
     /// List of all pools used in this frame.
     /// The last pool is the one new profiling queries will try to make timer queries into.
@@ -906,6 +908,7 @@ pub type GpuTimerQueryTreeHandle = u32;
 /// Handle for the root scope.
 pub const ROOT_QUERY_HANDLE: GpuTimerQueryTreeHandle = u32::MAX;
 
+#[derive(Debug)]
 struct ActiveFrame {
     query_pools: RwLock<PendingFramePools>,
 
@@ -920,6 +923,7 @@ struct ActiveFrame {
     closed_query_receiver: Mutex<std::sync::mpsc::Receiver<GpuProfilerQuery>>,
 }
 
+#[derive(Debug)]
 struct PendingFrame {
     query_pools: Vec<Arc<QueryPool>>,
     closed_query_by_parent_handle: HashMap<GpuTimerQueryTreeHandle, Vec<GpuProfilerQuery>>,
