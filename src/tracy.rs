@@ -39,13 +39,13 @@ pub fn create_tracy_gpu_client(
     queue.submit([timestamp_encoder.finish(), copy_encoder.finish()]);
 
     map_buffer.slice(..).map_async(wgpu::MapMode::Read, |_| ());
-    device.poll(wgpu::Maintain::Wait);
+    device.poll(wgpu::PollType::Wait).unwrap();
 
     let view = map_buffer.slice(..).get_mapped_range();
     let timestamp: i64 = i64::from_le_bytes((*view).try_into().unwrap());
 
     let tracy_backend = match backend {
-        wgpu::Backend::Empty | wgpu::Backend::Metal | wgpu::Backend::BrowserWebGpu => {
+        wgpu::Backend::Noop | wgpu::Backend::Metal | wgpu::Backend::BrowserWebGpu => {
             tracy_client::GpuContextType::Invalid
         }
         wgpu::Backend::Vulkan => tracy_client::GpuContextType::Vulkan,
