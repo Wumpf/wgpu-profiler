@@ -36,7 +36,7 @@ fn handle_dropped_frames_gracefully() {
     }
 
     // Poll to explicitly trigger mapping callbacks.
-    device.poll(wgpu::Maintain::Wait);
+    device.poll(wgpu::PollType::Wait).unwrap();
 
     // A single (!) frame should now be available.
     assert!(profiler

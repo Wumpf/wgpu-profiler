@@ -90,15 +90,10 @@ impl GfxState {
         dbg!(adapter.features());
 
         let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: None,
-                    required_features: adapter.features() & GpuProfiler::ALL_WGPU_TIMER_FEATURES,
-                    required_limits: wgpu::Limits::default(),
-                    memory_hints: wgpu::MemoryHints::default(),
-                },
-                None,
-            )
+            .request_device(&wgpu::DeviceDescriptor {
+                required_features: adapter.features() & GpuProfiler::ALL_WGPU_TIMER_FEATURES,
+                ..Default::default()
+            })
             .await
             .expect("Failed to create device");
 
