@@ -1,5 +1,8 @@
 # Change Log
 
+## 0.23.0
+* Update to wgpu 24.0.0, by @waywardmonkeys in [#95](https://github.com/Wumpf/wgpu-profiler/pull/95)
+
 ## 0.22.0
 * Device no longer needs to be passed for scope/start-query/end-query, in [#93](https://github.com/Wumpf/wgpu-profiler/pull/93)
 
