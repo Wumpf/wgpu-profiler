@@ -47,7 +47,7 @@ fn write_results_recursive(
         //
         // for now, we use this hack to convert to integer
         let tid_to_int = |tid| {
-            format!("{:?}", tid)
+            format!("{tid:?}")
                 .replace("ThreadId(", "")
                 .replace(')', "")
                 .parse::<u64>()

@@ -68,7 +68,7 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
         .unwrap();
 
     // Print entire tree. Useful for debugging the test if it fails!
-    println!("{:#?}", frame);
+    println!("{frame:#?}");
 
     // Check if the frame gives us the expected nesting of timer scopes.
     validate_results(
