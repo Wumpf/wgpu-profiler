@@ -35,7 +35,7 @@ pub fn create_tracy_gpu_client(
     let mut copy_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("wgpu-profiler gpu -> cpu copy timestamp"),
     });
-    copy_encoder.copy_buffer_to_buffer(&resolve_buffer, 0, &map_buffer, 0, wgpu::QUERY_SIZE as _);
+    copy_encoder.copy_buffer_to_buffer(&resolve_buffer, 0, &map_buffer, 0, wgpu::QUERY_SIZE as u64);
     queue.submit([timestamp_encoder.finish(), copy_encoder.finish()]);
 
     map_buffer.slice(..).map_async(wgpu::MapMode::Read, |_| ());
