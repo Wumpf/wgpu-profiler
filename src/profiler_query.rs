@@ -71,7 +71,7 @@ impl GpuProfilerQuery {
     /// Only ever returns `Some` for queries that were created using [`GpuProfiler::begin_pass_query`].
     ///
     /// [`GpuProfiler::begin_pass_query`]: crate::GpuProfiler::begin_pass_query
-    pub fn render_pass_timestamp_writes(&self) -> Option<wgpu::RenderPassTimestampWrites> {
+    pub fn render_pass_timestamp_writes(&self) -> Option<wgpu::RenderPassTimestampWrites<'_>> {
         self.timer_query_pair.as_ref().and_then(|query| {
             (query.usage_state == QueryPairUsageState::ReservedForPassTimestampWrites).then(|| {
                 wgpu::RenderPassTimestampWrites {
@@ -89,7 +89,7 @@ impl GpuProfilerQuery {
     /// Only ever returns `Some` for queries that were created using [`GpuProfiler::begin_pass_query`].
     ///
     /// [`GpuProfiler::begin_pass_query`]: crate::GpuProfiler::begin_pass_query
-    pub fn compute_pass_timestamp_writes(&self) -> Option<wgpu::ComputePassTimestampWrites> {
+    pub fn compute_pass_timestamp_writes(&self) -> Option<wgpu::ComputePassTimestampWrites<'_>> {
         self.timer_query_pair.as_ref().and_then(|query| {
             (query.usage_state == QueryPairUsageState::ReservedForPassTimestampWrites).then(|| {
                 wgpu::ComputePassTimestampWrites {
