@@ -34,7 +34,7 @@ fn interleaved_scopes() {
         .unwrap();
 
     // Print entire tree. Useful for debugging the test if it fails!
-    println!("{:#?}", frame);
+    println!("{frame:#?}");
 
     // Check if the frame gives us the expected nesting of timer scopes.
     validate_results(
@@ -110,7 +110,7 @@ fn multithreaded_scopes() {
         .unwrap();
 
     // Print entire tree. Useful for debugging the test if it fails!
-    println!("{:#?}", frame);
+    println!("{frame:#?}");
 
     // Both encoders should have produces the scopes, albeit in arbitrary order.
     validate_results_unordered(
