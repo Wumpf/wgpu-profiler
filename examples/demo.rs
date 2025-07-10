@@ -41,7 +41,7 @@ fn console_output(results: &Option<Vec<GpuTimerQueryResult>>, enabled_features: 
     print!("\x1B[2J\x1B[1;1H"); // Clear terminal and put cursor to first row first column
     println!("Welcome to wgpu_profiler demo!");
     println!();
-    println!("Enabled device features: {:?}", enabled_features);
+    println!("Enabled device features: {enabled_features:?}");
     println!();
     println!(
         "Press space to write out a trace file that can be viewed in chrome's chrome://tracing"
@@ -156,7 +156,7 @@ impl GfxState {
                     .expect("Failed to create profiler")
             }
             _ => {
-                panic!("Failed to create profiler: {}", err);
+                panic!("Failed to create profiler: {err}");
             }
         });
 
