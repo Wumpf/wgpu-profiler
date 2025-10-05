@@ -60,7 +60,7 @@ fn nested_scopes(device: &wgpu::Device, queue: &wgpu::Queue) {
     queue.submit([encoder0.finish(), encoder1.finish(), encoder2.finish()]);
     profiler.end_frame().unwrap();
 
-    device.poll(wgpu::PollType::Wait).unwrap();
+    device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
 
     // Single frame should now be available.
     let frame = profiler

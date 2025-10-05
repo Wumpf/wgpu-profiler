@@ -78,7 +78,7 @@ fn end_frame_unresolved_query() {
     }
     assert_eq!(profiler.end_frame(), Ok(()));
 
-    device.poll(wgpu::PollType::Wait).unwrap();
+    device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
 }
 
 #[test]

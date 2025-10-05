@@ -26,7 +26,7 @@ fn interleaved_scopes() {
     queue.submit([encoder1.finish(), encoder0.finish()]);
     profiler.end_frame().unwrap();
 
-    device.poll(wgpu::PollType::Wait).unwrap();
+    device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
 
     // Single frame should now be available.
     let frame = profiler
@@ -102,7 +102,7 @@ fn multithreaded_scopes() {
     queue.submit([command_buffer0, command_buffer1, resolve_encoder.finish()]);
     profiler.end_frame().unwrap();
 
-    device.poll(wgpu::PollType::Wait).unwrap();
+    device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
 
     // Single frame should now be available.
     let frame = profiler

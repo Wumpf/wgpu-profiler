@@ -34,7 +34,7 @@ fn multiple_resolves_per_frame() {
     }
 
     // Poll to explicitly trigger mapping callbacks.
-    device.poll(wgpu::PollType::Wait).unwrap();
+    device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
 
     // Frame should now be available and contain all the scopes.
     let scopes = profiler

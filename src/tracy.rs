@@ -39,7 +39,7 @@ pub fn create_tracy_gpu_client(
     queue.submit([timestamp_encoder.finish(), copy_encoder.finish()]);
 
     map_buffer.slice(..).map_async(wgpu::MapMode::Read, |_| ());
-    device.poll(wgpu::PollType::Wait).unwrap();
+    device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
 
     let view = map_buffer.slice(..).get_mapped_range();
     let timestamp: i64 = i64::from_le_bytes((*view).try_into().unwrap());

@@ -1,6 +1,6 @@
 [package]
 name = "wgpu-profiler"
-version = "0.24.0"
+version = "0.25.0"
 authors = ["Andreas Reich <r_andreas2@web.de>"]
 edition = "2021"
 description = "Simple profiler scopes for wgpu using timer queries"
@@ -21,7 +21,7 @@ puffin = ["dep:puffin", "profiling/profile-with-puffin"]
 [dependencies]
 parking_lot = "0.12" # Used for Mutex & RwLock. Note that wgpu already depends on parking_lot as well.
 thiserror = "2"
-wgpu = { version = "26.0.0", default-features = false }
+wgpu = { version = "27.0.0", default-features = false }
 
 tracy-client = { version = "0.18", optional = true }
 puffin = { version = "0.19.1", optional = true }
@@ -31,5 +31,5 @@ futures-lite = "2"
 profiling = "1"
 puffin_http = "0.16.1"
 tracy-client = "0.18"
-wgpu = { version = "26.0.0", default-features = true }
+wgpu = { version = "27.0.0", default-features = true }
 winit = "0.30"
