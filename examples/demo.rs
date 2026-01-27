@@ -60,6 +60,8 @@ struct State {
     window: Option<Arc<winit::window::Window>>,
     gfx_state: Option<GfxState>,
     latest_profiler_results: Option<Vec<GpuTimerQueryResult>>,
+    #[cfg(feature = "puffin")]
+    puffin_scope_cache: wgpu_profiler::puffin::PuffinScopeCache,
 }
 
 struct GfxState {
@@ -264,6 +266,7 @@ impl ApplicationHandler<()> for State {
                     let mut gpu_profiler = PUFFIN_GPU_PROFILER.lock().unwrap();
                     wgpu_profiler::puffin::output_frame_to_puffin(
                         &mut gpu_profiler,
+                        &mut self.puffin_scope_cache,
                         self.latest_profiler_results.as_deref().unwrap_or_default(),
                     );
                     gpu_profiler.new_frame();
