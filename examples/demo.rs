@@ -105,7 +105,7 @@ impl GfxState {
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
             bind_group_layouts: &[],
-            push_constant_ranges: &[],
+            immediate_size: 0,
         });
 
         let surface_desc = wgpu::SurfaceConfiguration {
@@ -136,7 +136,7 @@ impl GfxState {
             primitive: wgpu::PrimitiveState::default(),
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 
@@ -369,6 +369,7 @@ fn draw(
                 depth_stencil_attachment: None,
                 occlusion_query_set: None,
                 timestamp_writes: pass_scope.render_pass_timestamp_writes(),
+                multiview_mask: None,
             });
 
         rpass.set_pipeline(render_pipeline);
