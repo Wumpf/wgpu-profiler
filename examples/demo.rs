@@ -1,4 +1,5 @@
 use std::{borrow::Cow, sync::Arc};
+use wgpu::CurrentSurfaceTexture;
 use wgpu_profiler::{GpuProfiler, GpuProfilerSettings, GpuTimerQueryResult};
 use winit::{
     application::ApplicationHandler,
@@ -74,7 +75,7 @@ struct GfxState {
 impl GfxState {
     async fn new(window: &Arc<winit::window::Window>) -> Self {
         let size = window.inner_size();
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         let surface = instance
             .create_surface(window.clone())
             .expect("Failed to create surface.");
@@ -228,9 +229,26 @@ impl ApplicationHandler<()> for State {
             WindowEvent::RedrawRequested => {
                 profiling::scope!("Redraw Requested");
 
-                let frame = surface
-                    .get_current_texture()
-                    .expect("Failed to acquire next surface texture");
+                let frame = match surface.get_current_texture() {
+                    CurrentSurfaceTexture::Success(frame) => frame,
+                    CurrentSurfaceTexture::Timeout | CurrentSurfaceTexture::Occluded => {
+                        // Try again later
+                        if let Some(window) = &self.window {
+                            window.request_redraw();
+                        }
+                        return;
+                    }
+                    CurrentSurfaceTexture::Suboptimal(_) | CurrentSurfaceTexture::Outdated => {
+                        surface.configure(device, surface_desc);
+                        if let Some(window) = &self.window {
+                            window.request_redraw();
+                        }
+                        return;
+                    }
+                    _ => {
+                        panic!("Failed to acquire next surface texture");
+                    }
+                };
                 let frame_view = frame
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
