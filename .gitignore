@@ -6,3 +6,5 @@
 **/*.rs.bk
 
 trace.json
+
+.DS_Store
