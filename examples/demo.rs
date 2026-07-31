@@ -84,6 +84,7 @@ impl GfxState {
                 power_preference: wgpu::PowerPreference::default(),
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
+                apply_limit_buckets: false,
             })
             .await
             .expect("Failed to find an appropriate adapter");
@@ -266,7 +267,7 @@ impl ApplicationHandler<()> for State {
                 }
                 {
                     profiling::scope!("Present");
-                    frame.present();
+                    queue.present(frame);
                 }
 
                 profiling::finish_frame!();
