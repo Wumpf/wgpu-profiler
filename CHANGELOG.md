@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.28.0
+* Update to wgpu 30.0.0, by @akx in [#109](https://github.com/Wumpf/wgpu-profiler/pull/109)
+* Update puffin to 0.20, by @Knobibrot in [#108](https://github.com/Wumpf/wgpu-profiler/pull/108)
+
 ## 0.27.0
 * Update to wgpu 29.0.0, by @nical in [#103](https://github.com/Wumpf/wgpu-profiler/pull/103)
 
