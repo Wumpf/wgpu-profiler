@@ -12,6 +12,10 @@ pub enum CreationError {
     #[cfg(feature = "tracy")]
     #[error("Failed to create Tracy GPU context: {0}")]
     TracyGpuContextCreationError(#[from] tracy_client::GpuContextCreationError),
+
+    #[cfg(feature = "tracy")]
+    #[error("Failed to read back initial GPU timestamp for Tracy: {0}")]
+    TracyGpuTimestampReadback(#[from] wgpu::MapRangeError),
 }
 
 #[cfg(feature = "tracy")]
@@ -32,6 +36,12 @@ impl PartialEq for CreationError {
                         tracy_client::GpuContextCreationError::TooManyContextsCreated
                     )
                 ),
+            },
+            CreationError::TracyGpuTimestampReadback(left) => match other {
+                CreationError::TracyGpuTimestampReadback(right) => {
+                    left.to_string() == right.to_string()
+                }
+                _ => false,
             },
         }
     }
