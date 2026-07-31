@@ -762,7 +762,12 @@ impl GpuProfiler {
                         .read_buffer
                         .slice(offset..(offset + (wgpu::QUERY_SIZE * 2) as u64))
                         .get_mapped_range()
-                        .unwrap();
+                        .expect(
+                            "Failed to get mapped range of a query buffer. \
+                            This should be impossible: frames are only processed once all \
+                            buffer mappings succeeded, and each query's range is contained \
+                            in the mapped region.",
+                        );
                     let start_raw = u64::from_le_bytes(
                         buffer_slice[0..wgpu::QUERY_SIZE as usize]
                             .try_into()
